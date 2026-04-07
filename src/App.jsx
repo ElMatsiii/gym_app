@@ -1,10 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   REALISTIC XP SCALING
-   Based on real fitness progression: novice → elite takes months/years
-   Total XP to max rank per zone: ~4500 XP (realistic for 6-12 months)
-───────────────────────────────────────────────────────────────────────────── */
 const RANKS = [
   { name: "Novato",     short: "I",    icon: "N", min: 0,    color: "#6b7280", glow: "#6b728030", next: 200  },
   { name: "Bronce",     short: "II",   icon: "B", min: 200,  color: "#b87333", glow: "#b8733330", next: 600  },
@@ -16,8 +11,6 @@ const RANKS = [
   { name: "Gran Élite", short: "VIII", icon: "E", min: 7000, color: "#f43f5e", glow: "#f43f5e40", next: null },
 ];
 
-/* XP per exercise calibrated: ~3-5 sessions/week to rank up every 3-4 weeks at lower ranks,
-   ~8-12 weeks at higher ranks */
 const ZONES = [
   { id: "pecho",    label: "Pecho",    accentDark: "#f43f5e", accentLight: "#e11d48", bg: "rgba(244,63,94,0.07)"  },
   { id: "espalda",  label: "Espalda",  accentDark: "#38bdf8", accentLight: "#0284c7", bg: "rgba(56,189,248,0.07)" },
@@ -27,12 +20,6 @@ const ZONES = [
   { id: "hombros",  label: "Hombros",  accentDark: "#fb923c", accentLight: "#ea580c", bg: "rgba(251,146,60,0.07)" },
 ];
 
-/* Exercises with REALISTIC XP:
-   - Beginner compound: 15-20 XP/set
-   - Advanced compound: 20-30 XP/set
-   - Isolation: 8-12 XP/set
-   - A full session of 3-4 exercises gives ~120-200 XP
-   - Need ~200 XP to reach Bronce (1-2 sessions), ~400 more to Plata (2-3 sessions), etc. */
 const EXERCISES = {
   pecho: [
     { name: "Flexiones",            sets: 3, reps: "12",  xp: 18, level: 1, muscle: "Pectoral Mayor" },
@@ -92,8 +79,6 @@ const EXERCISES = {
   ],
 };
 
-/* Weekly plan — science-based split:
-   Push/Pull/Legs with cardio integration */
 const DAILY = [
   { day: "Lunes",     zones: ["pecho",   "hombros"],  label: "Push — Pecho & Hombros",   type: "push"  },
   { day: "Martes",    zones: ["piernas", "cardio"],   label: "Piernas & Cardio",           type: "legs"  },
@@ -104,9 +89,6 @@ const DAILY = [
   { day: "Domingo",   zones: [],                      label: "Descanso Activo",            type: "rest"  },
 ];
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   HELPERS
-───────────────────────────────────────────────────────────────────────────── */
 const getRank     = xp => [...RANKS].reverse().find(r => xp >= r.min) ?? RANKS[0];
 const getNextRank = xp => RANKS.find(r => r.min > xp) ?? null;
 const xpPct       = xp => {
@@ -121,11 +103,179 @@ const DEFAULT_STATE = () => ({
   weekStart: null, personalBests: {},
 });
 
-const TODAY_DATE = new Date().toLocaleDateString("es-CL");
+const ACHIEVEMENTS = [
+  { id: "first_session",   name: "Primer Paso",       desc: "Completa tu primera sesión",         icon: "star",    cond: s => s.totalSessions >= 1 },
+  { id: "week_streak",     name: "Semana Perfecta",   desc: "Entrena 7 días seguidos",             icon: "flame",   cond: s => s.streak >= 7 },
+  { id: "iron_body",       name: "Cuerpo de Hierro",  desc: "Alcanza Bronce en 3 zonas",          icon: "shield",  cond: s => Object.values(s.xp).filter(x => x >= 200).length >= 3 },
+  { id: "centurion",       name: "Centurión",         desc: "Acumula 1,000 XP en total",          icon: "trophy",  cond: s => Object.values(s.xp).reduce((a,b)=>a+b,0) >= 1000 },
+  { id: "gold_zone",       name: "Zona Dorada",       desc: "Llega a Oro en cualquier zona",      icon: "star",    cond: s => Object.values(s.xp).some(x => x >= 1200) },
+  { id: "sessions_10",     name: "Veterano",          desc: "Completa 10 sesiones",               icon: "swords",  cond: s => s.totalSessions >= 10 },
+  { id: "sessions_25",     name: "Guerrero",          desc: "Completa 25 sesiones",               icon: "swords",  cond: s => s.totalSessions >= 25 },
+  { id: "all_zones",       name: "Completo",          desc: "Entrena todas las zonas",            icon: "muscle",  cond: s => Object.values(s.xp).every(x => x > 0) },
+  { id: "platinum_any",    name: "Élite Emergente",   desc: "Llega a Platino en cualquier zona",  icon: "trophy",  cond: s => Object.values(s.xp).some(x => x >= 2200) },
+];
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   SVG ICONS
-───────────────────────────────────────────────────────────────────────────── */
+const STYLES = `
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#060810;--surface:#0a0d15;--card:#0f1420;--card2:#131827;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.11);--border3:rgba(255,255,255,0.18);
+  --text:#cdd6f0;--muted:#4a5568;--muted2:#6b7a8d;
+  --accent:#f59e0b;--accent2:#f97316;--red:#f43f5e;--blue:#38bdf8;--green:#4ade80;--purple:#c084fc;
+}
+.frpg{min-height:100svh;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:14px;max-width:430px;margin:0 auto;position:relative;overflow-x:hidden;}
+.frpg::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,0.012) 0px,rgba(255,255,255,0.012) 1px,transparent 1px,transparent 8px);}
+.frpg>*{position:relative;z-index:1;}
+.scroll-area{overflow-y:auto;padding:16px 16px 88px;height:calc(100svh - 52px);}
+.topbar{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--border);background:rgba(6,8,16,0.93);backdrop-filter:blur(24px);position:sticky;top:0;z-index:10;}
+.logo{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px;letter-spacing:5px;color:#e2e8f0;}
+.logo span{color:var(--accent);}
+.tp-right{display:flex;align-items:center;gap:10px;}
+.xp-pill{display:flex;align-items:center;gap:6px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:100px;padding:4px 12px;font-size:11px;font-weight:600;color:var(--muted2);}
+.xp-pill b{color:var(--accent);font-size:12px;}
+.streak-pill{display:flex;align-items:center;gap:5px;background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);border-radius:100px;padding:4px 10px;font-size:11px;font-weight:600;}
+.streak-num{color:#fb923c;font-size:13px;font-weight:700;font-family:'Rajdhani',sans-serif;}
+.botnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;height:60px;background:rgba(6,8,16,0.96);backdrop-filter:blur(24px);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-around;z-index:10;}
+.bnbtn{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;cursor:pointer;color:var(--muted);transition:color .2s;padding:4px 18px;}
+.bnbtn.on{color:var(--accent);}
+.bnlbl{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-top:1px;}
+.hero{border-radius:18px;padding:22px 24px;border:1px solid var(--border2);background:var(--card);position:relative;overflow:hidden;}
+.hero-scan{position:absolute;top:0;left:-100%;width:60%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.03),transparent);animation:scan 4s ease-in-out infinite;pointer-events:none;}
+@keyframes scan{0%,100%{left:-60%}50%{left:120%}}
+.hero-corner{position:absolute;top:12px;right:12px;font-family:'Rajdhani',sans-serif;font-size:72px;font-weight:700;line-height:1;user-select:none;opacity:0.05;color:var(--hcolor);}
+.hero-lbl{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--muted2);margin-bottom:5px;}
+.hero-rank{font-family:'Rajdhani',sans-serif;font-size:34px;font-weight:700;letter-spacing:3px;line-height:1;}
+.hero-stats{display:flex;gap:18px;margin-top:8px;font-size:11px;color:var(--muted2);}
+.hero-stat b{color:var(--text);font-weight:600;}
+.xb-track{height:3px;border-radius:3px;background:rgba(255,255,255,.05);margin-top:14px;position:relative;overflow:hidden;}
+.xb-fill{height:100%;border-radius:3px;transition:width .9s cubic-bezier(.4,0,.2,1);position:relative;}
+.xb-fill::after{content:'';position:absolute;top:0;right:0;bottom:0;width:20px;background:rgba(255,255,255,0.4);filter:blur(4px);}
+.xb-meta{display:flex;justify-content:space-between;margin-top:5px;font-size:10px;color:var(--muted);}
+.sec{font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin:20px 0 10px;display:flex;align-items:center;gap:8px;}
+.sec::after{content:'';flex:1;height:1px;background:var(--border);}
+.today{border-radius:16px;padding:0;overflow:hidden;border:1px solid rgba(245,158,11,.18);cursor:pointer;transition:border-color .2s;}
+.today:hover{border-color:rgba(245,158,11,.35);}
+.today-header{padding:16px 20px;background:linear-gradient(135deg,rgba(245,158,11,0.07),rgba(249,115,22,0.05));display:flex;align-items:center;justify-content:space-between;}
+.today-name{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--accent);}
+.today-sub{font-size:11px;color:var(--muted2);margin-top:2px;}
+.today-arrow{width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.25);display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0;}
+.today-zones{display:flex;padding:10px 16px;gap:8px;border-top:1px solid rgba(245,158,11,.1);background:rgba(245,158,11,.03);}
+.today-zone-badge{padding:4px 12px;border-radius:100px;font-size:11px;font-weight:600;background:rgba(255,255,255,0.05);border:1px solid var(--border2);color:var(--muted2);}
+.wstrip{display:flex;gap:5px;}
+.wday{flex:1;border-radius:10px;padding:8px 4px;text-align:center;border:1px solid var(--border);background:var(--card);font-size:10px;font-weight:600;color:var(--muted);}
+.wday.on{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.06);color:var(--accent);}
+.wday.rest{border-color:var(--border);color:var(--muted);opacity:0.5;}
+.wday.done{border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.05);color:#4ade80;}
+.wday-lbl{font-size:9px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;opacity:.7;}
+.wday-dot{width:5px;height:5px;border-radius:50%;background:currentColor;margin:2px auto 0;opacity:0.7;}
+.zgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.zcard{border-radius:16px;padding:14px 14px 12px;border:1px solid var(--border);background:var(--card);cursor:pointer;text-align:left;transition:transform .18s,border-color .2s,background .2s;position:relative;overflow:hidden;}
+.zcard::before{content:'';position:absolute;inset:0;background:var(--zbg);pointer-events:none;}
+.zcard:hover{border-color:var(--border2);transform:translateY(-1px);}
+.zcard:active{transform:scale(.97);}
+.z-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;}
+.z-lbl{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:2px;}
+.z-rank{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:var(--zacc);}
+.z-bar{height:2px;background:rgba(255,255,255,.05);border-radius:2px;margin-top:8px;}
+.z-bar-fill{height:100%;border-radius:2px;transition:width .7s ease;}
+.z-xp{font-size:10px;color:var(--muted);margin-top:4px;}
+.exitem{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:12px;border:1px solid var(--border);background:var(--card);cursor:pointer;transition:all .18s;margin-bottom:6px;}
+.exitem:hover{border-color:var(--border2);background:var(--card2);}
+.exitem.done{background:rgba(74,222,128,.04);border-color:rgba(74,222,128,.2);}
+.excheck{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;}
+.exitem.done .excheck{background:#4ade80;border-color:#4ade80;}
+.exname{font-weight:500;font-size:14px;color:var(--text);}
+.exitem.done .exname{color:var(--muted);text-decoration:line-through;}
+.exmeta{font-size:11px;color:var(--muted);margin-top:2px;}
+.ex-muscle{font-size:10px;color:var(--muted2);margin-top:1px;font-style:italic;}
+.exxp{margin-left:auto;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--accent);flex-shrink:0;}
+.ex-level{font-size:9px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:4px;text-transform:uppercase;flex-shrink:0;}
+.ex-level.l1{background:rgba(74,222,128,.1);color:#4ade80;border:1px solid rgba(74,222,128,.2);}
+.ex-level.l2{background:rgba(245,158,11,.1);color:#f59e0b;border:1px solid rgba(245,158,11,.2);}
+.ex-level.l3{background:rgba(248,113,113,.1);color:#f87171;border:1px solid rgba(248,113,113,.2);}
+.ex-level.l4{background:rgba(192,132,252,.1);color:#c084fc;border:1px solid rgba(192,132,252,.2);}
+
+/* Zone section in day view - collapsible header */
+.zone-section-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;border-radius:12px;border:1px solid var(--border);
+  background:var(--card2);cursor:pointer;margin-bottom:6px;transition:border-color .2s;
+}
+.zone-section-hdr.open{border-color:var(--border2);border-radius:12px 12px 0 0;margin-bottom:0;}
+.zone-section-body{border:1px solid var(--border2);border-top:none;border-radius:0 0 12px 12px;padding:8px 8px;margin-bottom:8px;background:rgba(255,255,255,.01);}
+
+.back{display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:var(--muted2);font-size:13px;font-weight:500;padding:0;margin-bottom:18px;transition:color .2s;}
+.back:hover{color:var(--text);}
+.save-btn{width:100%;padding:15px;border-radius:13px;border:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;text-transform:uppercase;background:linear-gradient(135deg,#f59e0b,#f97316);color:#07090f;transition:opacity .2s,transform .15s;margin-top:8px;}
+.save-btn:active{transform:scale(.98);opacity:.9;}
+.save-btn:disabled{opacity:.4;cursor:not-allowed;}
+.reset-btn{width:100%;padding:12px;background:none;border:1px solid rgba(239,68,68,.15);border-radius:11px;color:rgba(239,68,68,.45);font-size:12px;font-weight:600;cursor:pointer;transition:background .2s;margin-top:6px;}
+.reset-btn:hover{background:rgba(239,68,68,.06);}
+.rrow{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:13px;border:1px solid var(--border);background:var(--card);cursor:pointer;margin-bottom:8px;transition:all .2s;}
+.rrow:hover{border-color:var(--border2);background:var(--card2);}
+.rrow.rest-row{opacity:.5;cursor:default;}
+.rrow-type{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:5px;}
+.type-push{background:rgba(244,63,94,.1);color:#f43f5e;border:1px solid rgba(244,63,94,.2);}
+.type-pull{background:rgba(56,189,248,.1);color:#38bdf8;border:1px solid rgba(56,189,248,.2);}
+.type-legs{background:rgba(74,222,128,.1);color:#4ade80;border:1px solid rgba(74,222,128,.2);}
+.type-cardio{background:rgba(192,132,252,.1);color:#c084fc;border:1px solid rgba(192,132,252,.2);}
+.type-full{background:rgba(245,158,11,.1);color:#f59e0b;border:1px solid rgba(245,158,11,.2);}
+.type-rest{background:rgba(107,114,128,.1);color:#6b7280;border:1px solid rgba(107,114,128,.2);}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.sbox{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:14px 12px;text-align:center;}
+.sval{font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:700;color:var(--text);line-height:1;}
+.slbl{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.05em;}
+.szrow{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:8px;}
+.szhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.lrow{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;border-radius:11px;background:var(--card);margin-bottom:5px;border:1px solid var(--border);}
+.ldate{font-size:10px;color:var(--muted);}
+.lzone{font-size:12px;font-weight:500;}
+.lxp{font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);font-size:14px;}
+.ach-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.ach-card{border-radius:13px;padding:13px;border:1px solid var(--border);background:var(--card);}
+.ach-card.earned{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.04);}
+.ach-card.locked{opacity:.45;}
+.ach-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:8px;}
+.ach-icon.earned{background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:var(--accent);}
+.ach-icon.locked{background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--muted);}
+.ach-name{font-size:12px;font-weight:600;margin-bottom:2px;}
+.ach-desc{font-size:10px;color:var(--muted);line-height:1.4;}
+.rest-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;text-align:center;color:var(--muted);}
+.toast{position:fixed;top:62px;left:50%;transform:translateX(-50%);background:rgba(10,13,21,0.95);border:1px solid rgba(245,158,11,.3);border-radius:100px;padding:8px 20px;font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap;z-index:50;backdrop-filter:blur(16px);animation:tin .3s ease;}
+@keyframes tin{from{opacity:0;transform:translate(-50%,-12px)}to{opacity:1;transform:translate(-50%,0)}}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:100;padding:24px;backdrop-filter:blur(12px);animation:fin .22s ease;}
+@keyframes fin{from{opacity:0}to{opacity:1}}
+.rucard{background:var(--card);border:1px solid rgba(245,158,11,.25);border-radius:22px;padding:32px 24px;text-align:center;max-width:290px;width:100%;animation:sin .32s cubic-bezier(.34,1.56,.64,1);}
+@keyframes sin{from{transform:scale(.82);opacity:0}to{transform:scale(1);opacity:1}}
+.ru-badge{display:flex;justify-content:center;margin-bottom:16px;}
+.ru-title{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px;}
+.ru-name{font-family:'Rajdhani',sans-serif;font-size:36px;font-weight:700;letter-spacing:3px;}
+.ru-zone{font-size:12px;color:var(--muted2);margin-top:6px;}
+.ru-btn{margin-top:20px;padding:11px 28px;border-radius:100px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:var(--accent);font-weight:700;font-size:13px;cursor:pointer;}
+.ach-toast{position:fixed;top:62px;left:50%;transform:translateX(-50%);background:rgba(10,13,21,0.97);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:10px 16px;z-index:51;backdrop-filter:blur(16px);animation:tin .3s ease;display:flex;align-items:center;gap:10px;min-width:220px;}
+.ach-toast-icon{width:28px;height:28px;border-radius:50%;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0;}
+.ach-toast-title{font-size:11px;font-weight:700;color:var(--accent);}
+.ach-toast-desc{font-size:10px;color:var(--muted2);}
+.pg-title{font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:700;margin-bottom:3px;}
+.pg-sub{font-size:11px;color:var(--muted2);margin-bottom:18px;}
+.goal-bar{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:14px 16px;}
+.goal-track{height:6px;border-radius:6px;background:rgba(255,255,255,.05);margin-top:8px;overflow:hidden;}
+.goal-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,#f59e0b,#f97316);transition:width .7s ease;}
+.goal-meta{display:flex;justify-content:space-between;margin-top:5px;font-size:10px;color:var(--muted);}
+.goal-meta b{color:var(--text);}
+
+/* Day summary bar in day view */
+.day-summary{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--card);border:1px solid var(--border2);border-radius:13px;
+  padding:14px 16px;margin-bottom:16px;
+}
+.day-xp-counter{text-align:right;}
+.day-xp-val{font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:var(--accent);line-height:1;}
+.day-xp-lbl{font-size:10px;color:var(--muted);}
+`;
+
 const Icon = ({ name, size = 20, color = "currentColor", strokeWidth = 1.7 }) => {
   const paths = {
     home:    "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10",
@@ -148,6 +298,7 @@ const Icon = ({ name, size = 20, color = "currentColor", strokeWidth = 1.7 }) =>
     back:    "M19 12H5M12 19l-7-7 7-7",
     clock:   "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 6v6l4 2",
     lock:    "M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zM7 11V7a5 5 0 0 1 10 0v4",
+    chevron: "M6 9l6 6 6-6",
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -159,7 +310,6 @@ const Icon = ({ name, size = 20, color = "currentColor", strokeWidth = 1.7 }) =>
   );
 };
 
-/* Zone-specific SVG illustrations (replaces emojis) */
 const ZoneIllustration = ({ zoneId, size = 40, color = "#ffffff" }) => {
   const illustrations = {
     pecho: (
@@ -233,385 +383,6 @@ const RankBadge = ({ rank, size = 32 }) => {
   );
 };
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   ACHIEVEMENTS
-───────────────────────────────────────────────────────────────────────────── */
-const ACHIEVEMENTS = [
-  { id: "first_session",   name: "Primer Paso",       desc: "Completa tu primera sesión",         icon: "star",    cond: s => s.totalSessions >= 1 },
-  { id: "week_streak",     name: "Semana Perfecta",   desc: "Entrena 7 días seguidos",             icon: "flame",   cond: s => s.streak >= 7 },
-  { id: "iron_body",       name: "Cuerpo de Hierro",  desc: "Alcanza Bronce en 3 zonas",          icon: "shield",  cond: s => Object.values(s.xp).filter(x => x >= 200).length >= 3 },
-  { id: "centurion",       name: "Centurión",         desc: "Acumula 1,000 XP en total",          icon: "trophy",  cond: s => Object.values(s.xp).reduce((a,b)=>a+b,0) >= 1000 },
-  { id: "gold_zone",       name: "Zona Dorada",       desc: "Llega a Oro en cualquier zona",      icon: "star",    cond: s => Object.values(s.xp).some(x => x >= 1200) },
-  { id: "sessions_10",     name: "Veterano",          desc: "Completa 10 sesiones",               icon: "swords",  cond: s => s.totalSessions >= 10 },
-  { id: "sessions_25",     name: "Guerrero",          desc: "Completa 25 sesiones",               icon: "swords",  cond: s => s.totalSessions >= 25 },
-  { id: "all_zones",       name: "Completo",          desc: "Entrena todas las zonas",            icon: "muscle",  cond: s => Object.values(s.xp).every(x => x > 0) },
-  { id: "platinum_any",    name: "Élite Emergente",   desc: "Llega a Platino en cualquier zona",  icon: "trophy",  cond: s => Object.values(s.xp).some(x => x >= 2200) },
-];
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   GLOBAL STYLES
-───────────────────────────────────────────────────────────────────────────── */
-const STYLES = `
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap');
-
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-
-:root{
-  --bg:#060810;
-  --surface:#0a0d15;
-  --card:#0f1420;
-  --card2:#131827;
-  --border:rgba(255,255,255,0.06);
-  --border2:rgba(255,255,255,0.11);
-  --border3:rgba(255,255,255,0.18);
-  --text:#cdd6f0;
-  --muted:#4a5568;
-  --muted2:#6b7a8d;
-  --accent:#f59e0b;
-  --accent2:#f97316;
-  --red:#f43f5e;
-  --blue:#38bdf8;
-  --green:#4ade80;
-  --purple:#c084fc;
-}
-
-.frpg{
-  min-height:100svh;background:var(--bg);
-  color:var(--text);font-family:'Inter',sans-serif;font-size:14px;
-  max-width:430px;margin:0 auto;position:relative;overflow-x:hidden;
-}
-
-/* Diagonal line texture */
-.frpg::before{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
-  background-image:repeating-linear-gradient(
-    -45deg,
-    rgba(255,255,255,0.012) 0px,
-    rgba(255,255,255,0.012) 1px,
-    transparent 1px,
-    transparent 8px
-  );
-}
-.frpg>*{position:relative;z-index:1;}
-
-.scroll-area{overflow-y:auto;padding:16px 16px 88px;height:calc(100svh - 52px);}
-
-/* ── Topbar ── */
-.topbar{
-  height:52px;display:flex;align-items:center;justify-content:space-between;
-  padding:0 18px;border-bottom:1px solid var(--border);
-  background:rgba(6,8,16,0.93);backdrop-filter:blur(24px);
-  position:sticky;top:0;z-index:10;
-}
-.logo{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:18px;letter-spacing:5px;color:#e2e8f0;}
-.logo span{color:var(--accent);}
-
-.tp-right{display:flex;align-items:center;gap:10px;}
-.xp-pill{
-  display:flex;align-items:center;gap:6px;
-  background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);
-  border-radius:100px;padding:4px 12px;font-size:11px;font-weight:600;color:var(--muted2);
-}
-.xp-pill b{color:var(--accent);font-size:12px;}
-.streak-pill{
-  display:flex;align-items:center;gap:5px;
-  background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);
-  border-radius:100px;padding:4px 10px;font-size:11px;font-weight:600;
-}
-.streak-num{color:#fb923c;font-size:13px;font-weight:700;font-family:'Rajdhani',sans-serif;}
-
-/* ── Bottom nav ── */
-.botnav{
-  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
-  width:100%;max-width:430px;height:60px;
-  background:rgba(6,8,16,0.96);backdrop-filter:blur(24px);
-  border-top:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-around;z-index:10;
-}
-.bnbtn{
-  display:flex;flex-direction:column;align-items:center;gap:2px;
-  background:none;border:none;cursor:pointer;color:var(--muted);
-  transition:color .2s;padding:4px 18px;
-}
-.bnbtn.on{color:var(--accent);}
-.bnlbl{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-top:1px;}
-
-/* ── Hero / Rank card ── */
-.hero{
-  border-radius:18px;padding:22px 24px;
-  border:1px solid var(--border2);background:var(--card);
-  position:relative;overflow:hidden;margin-bottom:0;
-}
-.hero-scan{
-  position:absolute;top:0;left:-100%;width:60%;height:100%;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.03),transparent);
-  animation:scan 4s ease-in-out infinite;pointer-events:none;
-}
-@keyframes scan{0%,100%{left:-60%}50%{left:120%}}
-.hero-corner{
-  position:absolute;top:12px;right:12px;
-  font-family:'Rajdhani',sans-serif;font-size:72px;font-weight:700;
-  line-height:1;user-select:none;opacity:0.05;color:var(--hcolor);
-}
-.hero-lbl{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--muted2);margin-bottom:5px;}
-.hero-rank{font-family:'Rajdhani',sans-serif;font-size:34px;font-weight:700;letter-spacing:3px;line-height:1;}
-.hero-stats{display:flex;gap:18px;margin-top:8px;font-size:11px;color:var(--muted2);}
-.hero-stat b{color:var(--text);font-weight:600;}
-
-/* ── XP bar ── */
-.xb-track{height:3px;border-radius:3px;background:rgba(255,255,255,0.05);margin-top:14px;position:relative;overflow:hidden;}
-.xb-fill{height:100%;border-radius:3px;transition:width .9s cubic-bezier(.4,0,.2,1);position:relative;}
-.xb-fill::after{content:'';position:absolute;top:0;right:0;bottom:0;width:20px;background:rgba(255,255,255,0.4);filter:blur(4px);}
-.xb-meta{display:flex;justify-content:space-between;margin-top:5px;font-size:10px;color:var(--muted);}
-
-/* ── Section title ── */
-.sec{
-  font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;
-  color:var(--muted);margin:20px 0 10px;
-  display:flex;align-items:center;gap:8px;
-}
-.sec::after{content:'';flex:1;height:1px;background:var(--border);}
-
-/* ── Today card ── */
-.today{
-  border-radius:16px;padding:0;overflow:hidden;
-  border:1px solid rgba(245,158,11,.18);
-  cursor:pointer;
-}
-.today-header{
-  padding:16px 20px;
-  background:linear-gradient(135deg,rgba(245,158,11,0.07),rgba(249,115,22,0.05));
-  display:flex;align-items:center;justify-content:space-between;
-}
-.today-name{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--accent);}
-.today-sub{font-size:11px;color:var(--muted2);margin-top:2px;}
-.today-arrow{
-  width:36px;height:36px;border-radius:50%;
-  background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.25);
-  display:flex;align-items:center;justify-content:center;
-  color:var(--accent);flex-shrink:0;
-}
-.today-zones{
-  display:flex;padding:10px 16px;gap:8px;border-top:1px solid rgba(245,158,11,.1);
-  background:rgba(245,158,11,.03);
-}
-.today-zone-badge{
-  padding:4px 12px;border-radius:100px;font-size:11px;font-weight:600;
-  background:rgba(255,255,255,0.05);border:1px solid var(--border2);color:var(--muted2);
-}
-
-/* ── Weekly strip ── */
-.wstrip{display:flex;gap:5px;}
-.wday{
-  flex:1;border-radius:10px;padding:8px 4px;text-align:center;
-  border:1px solid var(--border);background:var(--card);
-  font-size:10px;font-weight:600;color:var(--muted);cursor:default;
-}
-.wday.on{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.06);color:var(--accent);}
-.wday.rest{border-color:var(--border);color:var(--muted);opacity:0.5;}
-.wday.done{border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.05);color:#4ade80;}
-.wday-lbl{font-size:9px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;opacity:.7;}
-.wday-dot{width:5px;height:5px;border-radius:50%;background:currentColor;margin:2px auto 0;opacity:0.7;}
-
-/* ── Zone grid ── */
-.zgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.zcard{
-  border-radius:16px;padding:14px 14px 12px;border:1px solid var(--border);
-  background:var(--card);cursor:pointer;text-align:left;
-  transition:transform .18s,border-color .2s,background .2s;
-  position:relative;overflow:hidden;
-}
-.zcard::before{
-  content:'';position:absolute;inset:0;
-  background:var(--zbg);pointer-events:none;
-  transition:opacity .2s;
-}
-.zcard:hover{border-color:var(--border2);transform:translateY(-1px);}
-.zcard:active{transform:scale(.97);}
-.z-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;}
-.z-lbl{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:2px;}
-.z-rank{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;color:var(--zacc);}
-.z-bar{height:2px;background:rgba(255,255,255,.05);border-radius:2px;margin-top:8px;}
-.z-bar-fill{height:100%;border-radius:2px;transition:width .7s ease;}
-.z-xp{font-size:10px;color:var(--muted);margin-top:4px;}
-
-/* ── Exercise list ── */
-.exitem{
-  display:flex;align-items:center;gap:12px;
-  padding:13px 16px;border-radius:12px;border:1px solid var(--border);
-  background:var(--card);cursor:pointer;transition:all .18s;margin-bottom:6px;
-}
-.exitem:hover{border-color:var(--border2);background:var(--card2);}
-.exitem.done{background:rgba(74,222,128,.04);border-color:rgba(74,222,128,.2);}
-.exitem.locked{opacity:0.4;cursor:not-allowed;}
-.excheck{
-  width:22px;height:22px;border-radius:50%;border:1.5px solid var(--muted);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;
-}
-.exitem.done .excheck{background:#4ade80;border-color:#4ade80;}
-.exname{font-weight:500;font-size:14px;transition:color .2s;color:var(--text);}
-.exitem.done .exname{color:var(--muted);text-decoration:line-through;}
-.exmeta{font-size:11px;color:var(--muted);margin-top:2px;}
-.ex-muscle{font-size:10px;color:var(--muted2);margin-top:1px;font-style:italic;}
-.exxp{margin-left:auto;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--accent);flex-shrink:0;}
-.ex-level{
-  font-size:9px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:4px;
-  text-transform:uppercase;flex-shrink:0;
-}
-.ex-level.l1{background:rgba(74,222,128,.1);color:#4ade80;border:1px solid rgba(74,222,128,.2);}
-.ex-level.l2{background:rgba(245,158,11,.1);color:#f59e0b;border:1px solid rgba(245,158,11,.2);}
-.ex-level.l3{background:rgba(248,113,113,.1);color:#f87171;border:1px solid rgba(248,113,113,.2);}
-.ex-level.l4{background:rgba(192,132,252,.1);color:#c084fc;border:1px solid rgba(192,132,252,.2);}
-
-/* ── Buttons ── */
-.back{
-  display:flex;align-items:center;gap:6px;background:none;border:none;
-  cursor:pointer;color:var(--muted2);font-size:13px;font-weight:500;
-  padding:0;margin-bottom:18px;transition:color .2s;
-}
-.back:hover{color:var(--text);}
-.save-btn{
-  width:100%;padding:15px;border-radius:13px;border:none;cursor:pointer;
-  font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
-  background:linear-gradient(135deg,#f59e0b,#f97316);color:#07090f;
-  transition:opacity .2s,transform .15s;margin-top:8px;
-}
-.save-btn:active{transform:scale(.98);opacity:.9;}
-.reset-btn{
-  width:100%;padding:12px;background:none;border:1px solid rgba(239,68,68,.15);
-  border-radius:11px;color:rgba(239,68,68,.45);font-size:12px;font-weight:600;
-  cursor:pointer;transition:background .2s;margin-top:6px;
-}
-.reset-btn:hover{background:rgba(239,68,68,.06);}
-
-/* ── Routine rows ── */
-.rrow{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:14px 16px;border-radius:13px;border:1px solid var(--border);
-  background:var(--card);cursor:pointer;margin-bottom:8px;transition:all .2s;
-}
-.rrow:hover{border-color:var(--border2);background:var(--card2);}
-.rrow.rest-row{opacity:.5;cursor:default;}
-.rrow-type{
-  font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-  padding:3px 8px;border-radius:5px;
-}
-.type-push{background:rgba(244,63,94,.1);color:#f43f5e;border:1px solid rgba(244,63,94,.2);}
-.type-pull{background:rgba(56,189,248,.1);color:#38bdf8;border:1px solid rgba(56,189,248,.2);}
-.type-legs{background:rgba(74,222,128,.1);color:#4ade80;border:1px solid rgba(74,222,128,.2);}
-.type-cardio{background:rgba(192,132,252,.1);color:#c084fc;border:1px solid rgba(192,132,252,.2);}
-.type-full{background:rgba(245,158,11,.1);color:#f59e0b;border:1px solid rgba(245,158,11,.2);}
-.type-rest{background:rgba(107,114,128,.1);color:#6b7280;border:1px solid rgba(107,114,128,.2);}
-
-/* ── Stats ── */
-.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-.sbox{
-  background:var(--card);border:1px solid var(--border);border-radius:13px;
-  padding:14px 12px;text-align:center;
-}
-.sval{font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:700;color:var(--text);line-height:1;}
-.slbl{font-size:10px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.05em;}
-.szrow{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:8px;}
-.szhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
-
-/* ── Log ── */
-.lrow{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:9px 13px;border-radius:11px;background:var(--card);margin-bottom:5px;
-  border:1px solid var(--border);
-}
-.ldate{font-size:10px;color:var(--muted);}
-.lzone{font-size:12px;font-weight:500;}
-.lxp{font-family:'Rajdhani',sans-serif;font-weight:700;color:var(--accent);font-size:14px;}
-
-/* ── Achievements ── */
-.ach-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.ach-card{
-  border-radius:13px;padding:13px;border:1px solid var(--border);
-  background:var(--card);transition:border-color .2s;
-}
-.ach-card.earned{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.04);}
-.ach-card.locked{opacity:.45;}
-.ach-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:8px;}
-.ach-icon.earned{background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:var(--accent);}
-.ach-icon.locked{background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--muted);}
-.ach-name{font-size:12px;font-weight:600;margin-bottom:2px;}
-.ach-desc{font-size:10px;color:var(--muted);line-height:1.4;}
-
-/* ── Rest card ── */
-.rest-card{
-  background:var(--card);border:1px solid var(--border);border-radius:16px;
-  padding:28px;text-align:center;color:var(--muted);
-}
-
-/* ── Toast ── */
-.toast{
-  position:fixed;top:62px;left:50%;transform:translateX(-50%);
-  background:rgba(10,13,21,0.95);border:1px solid rgba(245,158,11,.3);
-  border-radius:100px;padding:8px 20px;font-size:12px;font-weight:600;color:var(--accent);
-  white-space:nowrap;z-index:50;backdrop-filter:blur(16px);
-  animation:tin .3s ease;
-}
-@keyframes tin{from{opacity:0;transform:translate(-50%,-12px)}to{opacity:1;transform:translate(-50%,0)}}
-
-/* ── Rank-up modal ── */
-.overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.88);
-  display:flex;align-items:center;justify-content:center;
-  z-index:100;padding:24px;backdrop-filter:blur(12px);
-  animation:fin .22s ease;
-}
-@keyframes fin{from{opacity:0}to{opacity:1}}
-.rucard{
-  background:var(--card);border:1px solid rgba(245,158,11,.25);
-  border-radius:22px;padding:32px 24px;text-align:center;
-  max-width:290px;width:100%;
-  animation:sin .32s cubic-bezier(.34,1.56,.64,1);
-}
-@keyframes sin{from{transform:scale(.82);opacity:0}to{transform:scale(1);opacity:1}}
-.ru-badge{display:flex;justify-content:center;margin-bottom:16px;}
-.ru-title{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--muted2);margin-bottom:4px;}
-.ru-name{font-family:'Rajdhani',sans-serif;font-size:36px;font-weight:700;letter-spacing:3px;}
-.ru-zone{font-size:12px;color:var(--muted2);margin-top:6px;}
-.ru-btn{
-  margin-top:20px;padding:11px 28px;border-radius:100px;
-  background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);
-  color:var(--accent);font-weight:700;font-size:13px;cursor:pointer;transition:background .2s;
-}
-.ru-btn:hover{background:rgba(245,158,11,.2);}
-
-/* ── New achievement toast ── */
-.ach-toast{
-  position:fixed;top:62px;left:50%;transform:translateX(-50%);
-  background:rgba(10,13,21,0.97);border:1px solid rgba(245,158,11,.35);
-  border-radius:14px;padding:10px 16px;z-index:51;backdrop-filter:blur(16px);
-  animation:tin .3s ease;display:flex;align-items:center;gap:10px;min-width:220px;
-}
-.ach-toast-icon{width:28px;height:28px;border-radius:50%;background:rgba(245,158,11,.15);
-  border:1px solid rgba(245,158,11,.3);display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0;}
-.ach-toast-title{font-size:11px;font-weight:700;color:var(--accent);}
-.ach-toast-desc{font-size:10px;color:var(--muted2);}
-
-.pg-title{font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:700;margin-bottom:3px;}
-.pg-sub{font-size:11px;color:var(--muted2);margin-bottom:18px;}
-
-/* ── Weekly goal bar ── */
-.goal-bar{
-  background:var(--card);border:1px solid var(--border);border-radius:13px;padding:14px 16px;
-  margin-bottom:0;
-}
-.goal-track{height:6px;border-radius:6px;background:rgba(255,255,255,.05);margin-top:8px;overflow:hidden;}
-.goal-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,#f59e0b,#f97316);transition:width .7s ease;}
-.goal-meta{display:flex;justify-content:space-between;margin-top:5px;font-size:10px;color:var(--muted);}
-.goal-meta b{color:var(--text);}
-
-/* Progress percent circle */
-.prog-ring{transform:rotate(-90deg);transform-origin:50% 50%;}
-`;
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   MAIN APP
-───────────────────────────────────────────────────────────────────────────── */
 export default function FitnessRPG() {
   const [state, setState] = useState(() => {
     try {
@@ -619,9 +390,14 @@ export default function FitnessRPG() {
       return s ? { ...DEFAULT_STATE(), ...JSON.parse(s) } : DEFAULT_STATE();
     } catch { return DEFAULT_STATE(); }
   });
+
+  // view: "home" | "routine" | "day" | "zone" | "stats"
   const [view, setView]             = useState("home");
-  const [activeZone, setActiveZone] = useState(null);
-  const [done, setDone]             = useState([]);
+  const [activeDayIdx, setActiveDayIdx] = useState(null); // for "day" view
+  const [activeZone, setActiveZone] = useState(null);     // for "zone" view
+  // done tracks completed exercises: key = zoneId, value = Set of exercise names
+  const [done, setDone]             = useState({});
+  const [openZoneSections, setOpenZoneSections] = useState({});
   const [toast, setToast]           = useState(null);
   const [rankUp, setRankUp]         = useState(null);
   const [achToast, setAchToast]     = useState(null);
@@ -637,7 +413,6 @@ export default function FitnessRPG() {
     try { localStorage.setItem("frpg-v4", JSON.stringify(state)); } catch {}
   }, [state]);
 
-  // Check achievements
   useEffect(() => {
     const earned = ACHIEVEMENTS.filter(a => a.cond(state));
     const newOnes = earned.filter(a => !state.achievements.includes(a.id));
@@ -671,37 +446,59 @@ export default function FitnessRPG() {
     });
   }
 
-  function toggleEx(ex, zoneId) {
-    const isDone = done.includes(ex.name);
-    if (isDone) {
-      setDone(d => d.filter(x => x !== ex.name));
-      setState(prev => ({ ...prev, xp: { ...prev.xp, [zoneId]: Math.max(0, prev.xp[zoneId] - ex.xp) } }));
-    } else {
-      setDone(d => [...d, ex.name]);
+  // Toggle exercise in day view (multi-zone)
+  function toggleExDay(ex, zoneId) {
+    const zDone = done[zoneId] ?? new Set();
+    const isDone = zDone.has(ex.name);
+    setDone(prev => {
+      const nxt = new Set(prev[zoneId] ?? []);
+      if (isDone) { nxt.delete(ex.name); } else { nxt.add(ex.name); }
+      return { ...prev, [zoneId]: nxt };
+    });
+    if (!isDone) {
       awardXP(zoneId, ex.xp);
       showToast(`+${ex.xp} XP · ${ex.name}`);
+    } else {
+      setState(prev => ({ ...prev, xp: { ...prev.xp, [zoneId]: Math.max(0, prev.xp[zoneId] - ex.xp) } }));
     }
   }
 
-  function openZone(id) { setActiveZone(id); setDone([]); setView("zone"); }
+  // Open a specific day (by index in DAILY)
+  function openDay(idx) {
+    const r = DAILY[idx];
+    if (!r || r.zones.length === 0) return;
+    setActiveDayIdx(idx);
+    setDone({});
+    // Open first zone section by default
+    const open = {};
+    r.zones.forEach(z => { open[z] = true; });
+    setOpenZoneSections(open);
+    setView("day");
+  }
 
-  function finishZone() {
-    if (done.length > 0) {
-      const earned = EXERCISES[activeZone]
-        .filter(e => done.includes(e.name))
-        .reduce((a, e) => a + e.xp, 0);
+  // Open single zone from zones grid
+  function openZoneView(id) {
+    setActiveZone(id);
+    setDone({ [id]: new Set() });
+    setView("zone");
+  }
+
+  function finishDay() {
+    // Count total exercises done and XP earned
+    const totalDone = Object.values(done).reduce((acc, s) => acc + s.size, 0);
+    if (totalDone > 0) {
+      const earnedXP = Object.entries(done).reduce((acc, [zoneId, names]) => {
+        return acc + EXERCISES[zoneId].filter(e => names.has(e.name)).reduce((a, e) => a + e.xp, 0);
+      }, 0);
+      const zonesWorked = Object.keys(done).filter(z => done[z].size > 0);
 
       setState(prev => {
-        // streak logic
         const today = new Date().toLocaleDateString("es-CL");
         const yesterday = new Date(Date.now() - 86400000).toLocaleDateString("es-CL");
         const newStreak = prev.lastTrainedDate === yesterday ? prev.streak + 1
           : prev.lastTrainedDate === today ? prev.streak : 1;
-
-        // week sessions
         const weekStart = getWeekStart();
         const weekSessions = prev.weekStart === weekStart ? prev.weekSessions + 1 : 1;
-
         return {
           ...prev,
           totalSessions: prev.totalSessions + 1,
@@ -711,14 +508,54 @@ export default function FitnessRPG() {
           weekSessions,
           log: [...prev.log.slice(-49), {
             date: today,
-            zone: activeZone,
-            xp: earned,
-            exercises: done.length,
+            zone: zonesWorked[0] ?? "pecho",
+            zones: zonesWorked,
+            xp: earnedXP,
+            exercises: totalDone,
           }],
         };
       });
     }
-    setView("home"); setActiveZone(null); setDone([]);
+    setView("home");
+    setActiveDayIdx(null);
+    setDone({});
+  }
+
+  // Legacy finishZone for single-zone view
+  function finishZone() {
+    if (activeZone) {
+      const zoneDone = done[activeZone] ?? new Set();
+      if (zoneDone.size > 0) {
+        const earnedXP = EXERCISES[activeZone]
+          .filter(e => zoneDone.has(e.name))
+          .reduce((a, e) => a + e.xp, 0);
+        setState(prev => {
+          const today = new Date().toLocaleDateString("es-CL");
+          const yesterday = new Date(Date.now() - 86400000).toLocaleDateString("es-CL");
+          const newStreak = prev.lastTrainedDate === yesterday ? prev.streak + 1
+            : prev.lastTrainedDate === today ? prev.streak : 1;
+          const weekStart = getWeekStart();
+          const weekSessions = prev.weekStart === weekStart ? prev.weekSessions + 1 : 1;
+          return {
+            ...prev,
+            totalSessions: prev.totalSessions + 1,
+            streak: newStreak,
+            lastTrainedDate: today,
+            weekStart,
+            weekSessions,
+            log: [...prev.log.slice(-49), {
+              date: today,
+              zone: activeZone,
+              xp: earnedXP,
+              exercises: zoneDone.size,
+            }],
+          };
+        });
+      }
+    }
+    setView("home");
+    setActiveZone(null);
+    setDone({});
   }
 
   function getWeekStart() {
@@ -728,21 +565,21 @@ export default function FitnessRPG() {
   }
 
   function NavBtn({ v, label, iconName }) {
+    const isOn = view === v || (v === "routine" && (view === "day"));
     return (
-      <button className={`bnbtn${view === v ? " on" : ""}`} onClick={() => setView(v)}>
+      <button className={`bnbtn${isOn ? " on" : ""}`} onClick={() => setView(v)}>
         <Icon name={iconName} size={19} />
         <span className="bnlbl">{label}</span>
       </button>
     );
   }
 
-  /* ── HOME ── */
+  // ── HOME ──
   function HomeView() {
     const gNext = getNextRank(avgXP);
     const gPct  = xpPct(avgXP);
     return (
       <div>
-        {/* Global rank hero */}
         <div className="hero" style={{ "--hcolor": gRank.color }}>
           <div className="hero-scan" />
           <div className="hero-corner">{gRank.short}</div>
@@ -767,7 +604,6 @@ export default function FitnessRPG() {
           </div>
         </div>
 
-        {/* Weekly goal */}
         <div className="sec">Objetivo semanal</div>
         <div className="goal-bar">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -787,10 +623,10 @@ export default function FitnessRPG() {
           </div>
         </div>
 
-        {/* Today */}
         <div className="sec">Hoy · {todayR.day}</div>
         {todayR.zones.length > 0 ? (
-          <div className="today" onClick={() => setView("routine")}>
+          // FIX: onClick now calls openDay(ridx) instead of setView("routine")
+          <div className="today" onClick={() => openDay(ridx)}>
             <div className="today-header">
               <div>
                 <div className="today-name">{todayR.label}</div>
@@ -801,9 +637,7 @@ export default function FitnessRPG() {
             <div className="today-zones">
               {todayR.zones.map(zid => {
                 const z = ZONES.find(z => z.id === zid);
-                return (
-                  <div key={zid} className="today-zone-badge">{z?.label}</div>
-                );
+                return <div key={zid} className="today-zone-badge">{z?.label}</div>;
               })}
               <div className="today-zone-badge" style={{ marginLeft: "auto" }}>
                 <span className={`rrow-type type-${todayR.type}`} style={{ border: "none", background: "none", padding: 0, fontSize: 9 }}>
@@ -814,21 +648,17 @@ export default function FitnessRPG() {
           </div>
         ) : (
           <div className="rest-card">
-            <div style={{ marginBottom: 10 }}>
-              <Icon name="clock" size={32} color="var(--muted)" />
-            </div>
+            <div style={{ marginBottom: 10 }}><Icon name="clock" size={32} color="var(--muted)" /></div>
             <div style={{ fontWeight: 600, fontSize: 15 }}>Día de Descanso</div>
             <div style={{ fontSize: 12, marginTop: 4 }}>Recuperación activa — camina, estira</div>
           </div>
         )}
 
-        {/* Week strip */}
         <div className="sec">Esta semana</div>
         <div className="wstrip">
           {DAILY.map((r, i) => {
             const isToday = i === ridx;
             const isRest = r.zones.length === 0;
-            // Check if this day has a log entry this week
             const todayObj = new Date();
             const dayOfWeek = todayObj.getDay();
             const dayDiff = i - (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
@@ -837,7 +667,6 @@ export default function FitnessRPG() {
             const dateStr = targetDate.toLocaleDateString("es-CL");
             const hasDone = state.log.some(l => l.date === dateStr);
             const isPast = dayDiff < 0;
-
             return (
               <div key={r.day} className={`wday${isToday ? " on" : ""}${isRest ? " rest" : ""}${hasDone && !isToday ? " done" : ""}`}>
                 <div className="wday-lbl">{r.day.slice(0, 3)}</div>
@@ -850,14 +679,13 @@ export default function FitnessRPG() {
           })}
         </div>
 
-        {/* Zones */}
         <div className="sec">Zonas Musculares</div>
         <div className="zgrid">
           {ZONES.map(z => {
             const rank = getRank(state.xp[z.id]);
             const pct  = xpPct(state.xp[z.id]);
             return (
-              <button key={z.id} className="zcard" onClick={() => openZone(z.id)}
+              <button key={z.id} className="zcard" onClick={() => openZoneView(z.id)}
                 style={{ "--zbg": z.bg, "--zacc": z.accentDark }}>
                 <div className="z-top">
                   <ZoneIllustration zoneId={z.id} size={38} color={z.accentDark} />
@@ -877,37 +705,31 @@ export default function FitnessRPG() {
     );
   }
 
-  /* ── ROUTINE ── */
+  // ── ROUTINE (weekly plan overview) ──
   function RoutineView() {
     return (
       <div>
-        <button className="back" onClick={() => setView("home")}>
-          <Icon name="back" size={16} /> Volver
-        </button>
-        <div className="pg-title">{todayR.label}</div>
-        <div className="pg-sub">{todayR.day} · Plan semanal</div>
-
-        <div className="sec">Semana completa</div>
+        <div className="pg-title">Plan Semanal</div>
+        <div className="pg-sub">Toca un día para comenzar a entrenar</div>
         {DAILY.map((r, i) => {
           const isToday = i === ridx;
           const typeClass = `type-${r.type}`;
+          const isRest = r.zones.length === 0;
+          // XP potential for this day
+          const potentialXP = r.zones.reduce((acc, zid) => acc + EXERCISES[zid].reduce((a, e) => a + e.xp, 0), 0);
           return (
             <div key={r.day}
-              className={`rrow${r.zones.length === 0 ? " rest-row" : ""}`}
-              onClick={() => {
-                if (r.zones.length > 0) {
-                  if (r.zones.length === 1) { openZone(r.zones[0]); }
-                  else { setView("home"); setTimeout(() => setView("routine"), 0); }
-                }
-              }}
+              className={`rrow${isRest ? " rest-row" : ""}`}
+              // FIX: clicking any training day now calls openDay(i)
+              onClick={() => !isRest && openDay(i)}
               style={isToday ? { borderColor: "rgba(245,158,11,.35)", background: "rgba(245,158,11,.04)" } : {}}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{
-                  width: 36, height: 36, borderRadius: 10,
+                  width: 38, height: 38, borderRadius: 10,
                   background: isToday ? "rgba(245,158,11,.12)" : "rgba(255,255,255,.04)",
                   border: `1px solid ${isToday ? "rgba(245,158,11,.3)" : "var(--border)"}`,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: "'Rajdhani',sans-serif", fontSize: 11, fontWeight: 700,
+                  fontFamily: "'Rajdhani',sans-serif", fontSize: 10, fontWeight: 700,
                   color: isToday ? "var(--accent)" : "var(--muted)",
                 }}>
                   {r.day.slice(0, 3).toUpperCase()}
@@ -918,65 +740,176 @@ export default function FitnessRPG() {
                     {isToday && <span style={{ fontSize: 9, color: "var(--accent)", fontWeight: 700, letterSpacing: ".08em" }}>HOY</span>}
                   </div>
                   <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
-                    {r.zones.length > 0 ? r.zones.map(zid => ZONES.find(z => z.id === zid)?.label).join(" + ") : "Descanso"}
+                    {r.zones.length > 0
+                      ? `${r.zones.map(zid => ZONES.find(z => z.id === zid)?.label).join(" + ")} · hasta +${potentialXP} XP`
+                      : "Descanso activo"}
                   </div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className={`rrow-type ${typeClass}`}>{r.type.toUpperCase()}</span>
-                {r.zones.length > 0 && <Icon name="arrow" size={14} color="var(--muted)" />}
+                {!isRest && <Icon name="arrow" size={14} color="var(--muted)" />}
               </div>
             </div>
           );
         })}
-
-        {todayR.zones.length > 0 && (
-          <>
-            <div className="sec">Zonas de hoy</div>
-            {todayR.zones.map(zid => {
-              const z = ZONES.find(z => z.id === zid);
-              const rank = getRank(state.xp[zid]);
-              const exCount = EXERCISES[zid].length;
-              const estXP = EXERCISES[zid].reduce((a, e) => a + e.xp, 0);
-              return (
-                <div key={zid} className="rrow" onClick={() => openZone(zid)}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <ZoneIllustration zoneId={zid} size={40} color={z.accentDark} />
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{z.label}</div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-                        {rank.name} · {exCount} ejercicios · hasta +{estXP} XP
-                      </div>
-                    </div>
-                  </div>
-                  <Icon name="arrow" size={16} color="var(--muted)" />
-                </div>
-              );
-            })}
-          </>
-        )}
       </div>
     );
   }
 
-  /* ── ZONE ── */
+  // ── DAY VIEW (multi-zone workout) — THIS IS THE NEW/FIXED VIEW ──
+  function DayView() {
+    if (activeDayIdx === null) return null;
+    const dayRoutine = DAILY[activeDayIdx];
+    const isToday = activeDayIdx === ridx;
+
+    const totalDoneCount = Object.values(done).reduce((acc, s) => acc + s.size, 0);
+    const totalEarnedXP = Object.entries(done).reduce((acc, [zoneId, names]) => {
+      return acc + EXERCISES[zoneId].filter(e => names.has(e.name)).reduce((a, e) => a + e.xp, 0);
+    }, 0);
+
+    const levelLabels = { 1: "Principiante", 2: "Intermedio", 3: "Avanzado", 4: "Élite" };
+
+    return (
+      <div>
+        <button className="back" onClick={finishDay}>
+          <Icon name="back" size={16} /> {totalDoneCount > 0 ? "Guardar y volver" : "Volver"}
+        </button>
+
+        <div style={{ marginBottom: 6 }}>
+          <div className="pg-title" style={{ marginBottom: 2 }}>{dayRoutine.label}</div>
+          <div style={{ fontSize: 11, color: "var(--muted2)" }}>
+            {dayRoutine.day}{isToday ? " · Hoy" : ""}
+            {" · "}{dayRoutine.zones.map(zid => ZONES.find(z => z.id === zid)?.label).join(" + ")}
+          </div>
+        </div>
+
+        {/* Summary bar */}
+        <div className="day-summary">
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Progreso de sesión</div>
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>
+              {totalDoneCount} ejercicio{totalDoneCount !== 1 ? "s" : ""} completado{totalDoneCount !== 1 ? "s" : ""}
+            </div>
+          </div>
+          <div className="day-xp-counter">
+            <div className="day-xp-val">+{totalEarnedXP}</div>
+            <div className="day-xp-lbl">XP ganados</div>
+          </div>
+        </div>
+
+        {/* Each zone as a collapsible section */}
+        {dayRoutine.zones.map(zoneId => {
+          const z = ZONES.find(z => z.id === zoneId);
+          const zoneDone = done[zoneId] ?? new Set();
+          const isOpen = openZoneSections[zoneId] ?? false;
+          const exs = EXERCISES[zoneId];
+          const zoneEarned = exs.filter(e => zoneDone.has(e.name)).reduce((a, e) => a + e.xp, 0);
+          const rank = getRank(state.xp[zoneId]);
+
+          return (
+            <div key={zoneId}>
+              {/* Collapsible header */}
+              <div
+                className={`zone-section-hdr${isOpen ? " open" : ""}`}
+                onClick={() => setOpenZoneSections(prev => ({ ...prev, [zoneId]: !prev[zoneId] }))}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <ZoneIllustration zoneId={zoneId} size={36} color={z.accentDark} />
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                      {z.label}
+                      {zoneDone.size > 0 && (
+                        <span style={{ fontSize: 10, color: "#4ade80", fontWeight: 700 }}>
+                          {zoneDone.size}/{exs.length} ✓
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--muted2)", marginTop: 2 }}>
+                      {rank.name} · {state.xp[zoneId]} XP
+                      {zoneEarned > 0 && <span style={{ color: "var(--accent)" }}> +{zoneEarned} hoy</span>}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <RankBadge rank={rank} size={26} />
+                  <div style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s" }}>
+                    <Icon name="chevron" size={16} color="var(--muted)" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Exercise list */}
+              {isOpen && (
+                <div className="zone-section-body">
+                  {/* Group by level */}
+                  {[1, 2, 3, 4].map(lvl => {
+                    const lvlExs = exs.filter(e => e.level === lvl);
+                    if (lvlExs.length === 0) return null;
+                    return (
+                      <div key={lvl}>
+                        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)", margin: "8px 4px 4px" }}>
+                          {levelLabels[lvl]}
+                        </div>
+                        {lvlExs.map(ex => {
+                          const isDone = zoneDone.has(ex.name);
+                          return (
+                            <div key={ex.name} className={`exitem${isDone ? " done" : ""}`}
+                              onClick={() => toggleExDay(ex, zoneId)}>
+                              <div className="excheck">
+                                {isDone && <Icon name="check" size={12} color="#07090f" />}
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div className="exname">{ex.name}</div>
+                                <div className="exmeta">{ex.sets} series × {ex.reps}</div>
+                                <div className="ex-muscle">{ex.muscle}</div>
+                              </div>
+                              <div className={`ex-level l${ex.level}`}>
+                                {ex.level === 1 ? "Básico" : ex.level === 2 ? "Inter." : ex.level === 3 ? "Avanz." : "Élite"}
+                              </div>
+                              <div className="exxp">+{ex.xp}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <button
+          className="save-btn"
+          onClick={finishDay}
+          disabled={totalDoneCount === 0}
+          style={{ marginTop: 16 }}
+        >
+          {totalDoneCount > 0
+            ? `Finalizar — ${totalDoneCount} ejercicios · +${totalEarnedXP} XP`
+            : "Completa al menos un ejercicio"}
+        </button>
+      </div>
+    );
+  }
+
+  // ── ZONE VIEW (single zone from zones grid) ──
   function ZoneView() {
     if (!activeZone) return null;
-    const z      = ZONES.find(z => z.id === activeZone);
-    const exs    = EXERCISES[activeZone];
-    const earned = exs.filter(e => done.includes(e.name)).reduce((a, e) => a + e.xp, 0);
+    const z   = ZONES.find(z => z.id === activeZone);
+    const exs = EXERCISES[activeZone];
+    const zoneDone = done[activeZone] ?? new Set();
+    const earned = exs.filter(e => zoneDone.has(e.name)).reduce((a, e) => a + e.xp, 0);
     const rank   = getRank(state.xp[activeZone]);
     const pct    = xpPct(state.xp[activeZone]);
-
-    const levelLabels = ["", "Principiante", "Intermedio", "Avanzado", "Élite"];
+    const levelLabels = { 1: "Principiante", 2: "Intermedio", 3: "Avanzado", 4: "Élite" };
 
     return (
       <div>
         <button className="back" onClick={finishZone}>
-          <Icon name="back" size={16} /> Guardar y volver
+          <Icon name="back" size={16} /> {zoneDone.size > 0 ? "Guardar y volver" : "Volver"}
         </button>
-
-        {/* Zone header */}
         <div style={{
           background: "var(--card)", border: "1px solid var(--border2)",
           borderRadius: 16, padding: "18px 18px 14px", marginBottom: 16,
@@ -1006,42 +939,46 @@ export default function FitnessRPG() {
           </div>
         </div>
 
-        {/* Exercises grouped by level */}
         {[1, 2, 3, 4].map(lvl => {
           const lvlExs = exs.filter(e => e.level === lvl);
           if (lvlExs.length === 0) return null;
           return (
             <div key={lvl}>
               <div className="sec">{levelLabels[lvl]}</div>
-              {lvlExs.map(ex => (
-                <div key={ex.name} className={`exitem${done.includes(ex.name) ? " done" : ""}`}
-                  onClick={() => toggleEx(ex, activeZone)}>
-                  <div className="excheck">
-                    {done.includes(ex.name) && <Icon name="check" size={12} color="#07090f" />}
+              {lvlExs.map(ex => {
+                const isDone = zoneDone.has(ex.name);
+                return (
+                  <div key={ex.name} className={`exitem${isDone ? " done" : ""}`}
+                    onClick={() => toggleExDay(ex, activeZone)}>
+                    <div className="excheck">
+                      {isDone && <Icon name="check" size={12} color="#07090f" />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div className="exname">{ex.name}</div>
+                      <div className="exmeta">{ex.sets} series × {ex.reps}</div>
+                      <div className="ex-muscle">{ex.muscle}</div>
+                    </div>
+                    <div className={`ex-level l${ex.level}`}>
+                      {ex.level === 1 ? "Básico" : ex.level === 2 ? "Inter." : ex.level === 3 ? "Avanz." : "Élite"}
+                    </div>
+                    <div className="exxp">+{ex.xp}</div>
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div className="exname">{ex.name}</div>
-                    <div className="exmeta">{ex.sets} series × {ex.reps}</div>
-                    <div className="ex-muscle">{ex.muscle}</div>
-                  </div>
-                  <div className={`ex-level l${ex.level}`}>{ex.level === 1 ? "Básico" : ex.level === 2 ? "Inter." : ex.level === 3 ? "Avanz." : "Élite"}</div>
-                  <div className="exxp">+{ex.xp}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           );
         })}
 
-        {done.length > 0 && (
+        {zoneDone.size > 0 && (
           <button className="save-btn" onClick={finishZone}>
-            Completar — {done.length} ejercicio{done.length !== 1 ? "s" : ""} · +{earned} XP
+            Completar — {zoneDone.size} ejercicio{zoneDone.size !== 1 ? "s" : ""} · +{earned} XP
           </button>
         )}
       </div>
     );
   }
 
-  /* ── STATS ── */
+  // ── STATS ──
   function StatsView() {
     const earnedAchs = ACHIEVEMENTS.filter(a => state.achievements.includes(a.id));
     const lockedAchs = ACHIEVEMENTS.filter(a => !state.achievements.includes(a.id));
@@ -1049,7 +986,6 @@ export default function FitnessRPG() {
       <div>
         <div className="pg-title">Estadísticas</div>
         <div className="pg-sub">Tu progreso detallado</div>
-
         <div className="stat-grid">
           {[
             ["XP Total", totalXP.toLocaleString()],
@@ -1089,7 +1025,6 @@ export default function FitnessRPG() {
           );
         })}
 
-        {/* Achievements */}
         <div className="sec">Logros</div>
         <div className="ach-grid">
           {earnedAchs.map(a => (
@@ -1108,7 +1043,6 @@ export default function FitnessRPG() {
           ))}
         </div>
 
-        {/* Log */}
         {state.log.length > 0 && (
           <>
             <div className="sec">Historial reciente</div>
@@ -1117,7 +1051,9 @@ export default function FitnessRPG() {
               return (
                 <div key={i} className="lrow">
                   <span className="ldate">{l.date}</span>
-                  <span className="lzone" style={{ color: z?.accentDark }}>{z?.label}</span>
+                  <span className="lzone" style={{ color: z?.accentDark }}>
+                    {l.zones ? l.zones.map(zid => ZONES.find(z => z.id === zid)?.label).join("+") : z?.label}
+                  </span>
                   <span style={{ fontSize: 11, color: "var(--muted)" }}>{l.exercises} ejerc.</span>
                   <span className="lxp">+{l.xp}</span>
                 </div>
@@ -1180,14 +1116,15 @@ export default function FitnessRPG() {
       <div className="scroll-area">
         {view === "home"    && <HomeView />}
         {view === "routine" && <RoutineView />}
+        {view === "day"     && <DayView />}
         {view === "zone"    && <ZoneView />}
         {view === "stats"   && <StatsView />}
       </div>
 
       <nav className="botnav">
-        <NavBtn v="home"    label="Inicio"  iconName="home" />
-        <NavBtn v="routine" label="Plan"    iconName="calendar" />
-        <NavBtn v="stats"   label="Stats"   iconName="chart" />
+        <NavBtn v="home"    label="Inicio"   iconName="home" />
+        <NavBtn v="routine" label="Plan"     iconName="calendar" />
+        <NavBtn v="stats"   label="Stats"    iconName="chart" />
       </nav>
     </div>
   );
