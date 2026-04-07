@@ -1,9 +1,16 @@
 {
-  "name": "FitnessRPG",
-  "short_name": "FitnessRPG",
+  "name": "FitRPG",
+  "short_name": "FitRPG",
+  "description": "Tu entrenamiento como un RPG",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#07090f",
-  "theme_color": "#f59e0b",
-  "icons": [{ "src": "/icon.png", "sizes": "192x192", "type": "image/png" }]
+  "orientation": "portrait",
+  "background_color": "#060810",
+  "theme_color": "#060810",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["health", "fitness"],
+  "lang": "es"
 }
