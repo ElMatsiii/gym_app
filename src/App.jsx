@@ -147,48 +147,39 @@ const ACHIEVEMENTS = [
 ];
 
 // ─── API HELPERS ──────────────────────────────────────────────────────────────
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
 async function fetchExercisesForZone(zoneId) {
- const bodyPart = ZONE_TO_BODYPART[zoneId];
+  const bodyPart = ZONE_TO_BODYPART[zoneId];
   if (!bodyPart) return null;
   try {
-    const url = `${EXERCISEDB_BASE}/exercises/bodyPart/${encodeURIComponent(bodyPart)}?limit=15&offset=0`;
-    console.log("🔍 Fetching:", url);
-    
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    console.log("📡 Status:", res.status);
-    
+    const res = await fetch(
+      `${SUPABASE_URL}/functions/v1/exercises?bodyPart=${encodeURIComponent(bodyPart)}&limit=15`,
+      {
+        headers: {
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        signal: AbortSignal.timeout(8000),
+      }
+    );
     if (!res.ok) throw new Error("API error");
+    const exercises = await res.json();
 
-    const data = await res.json();
-    console.log("📦 Raw response:", data);
-    console.log("📋 Exercises array:", data.data ?? data);
-    
-    const exercises = (data.data ?? data);
-    if (!Array.isArray(exercises) || exercises.length === 0) return null;
-
-    // Transform API response → our format
-    return exercises.slice(0, 10).map((ex, i) => {
-      const isCardio = ex.bodyPart === "cardio" || ex.equipment === "body weight" && ex.target === "cardiovascular system";
-      const hasTimer = ex.name && /plank|hold|static|isometric|wall sit|superman/i.test(ex.name);
-      const timerSecs = hasTimer ? 30 : null;
-      const diffWords = ex.name?.split(" ").length ?? 1;
-      const lvl = diffWords <= 2 ? 1 : diffWords === 3 ? 2 : diffWords <= 5 ? 3 : 4;
-      return {
-        name: ex.name ?? `Ejercicio ${i + 1}`,
-        sets: lvl <= 1 ? 3 : 4,
-        reps: hasTimer ? `${timerSecs}s` : isCardio ? "45s" : lvl === 1 ? "12" : lvl === 2 ? "10" : "8",
-        xp: 15 + lvl * 7 + (i % 3) * 3,
-        level: Math.min(lvl, 3),
-        muscle: ex.target ? ex.target.replace(/-/g, " ") : ex.bodyPart ?? zoneId,
-        timed: hasTimer || (isCardio && ex.name?.toLowerCase().includes("jump")),
-        timerSecs: hasTimer ? timerSecs : isCardio ? 45 : null,
-        gifUrl: ex.gifUrl ?? null,
-        apiId: ex.id ?? null,
-        fromApi: true,
-      };
-    });
+    return exercises.slice(0, 10).map((ex) => ({
+      name: ex.name,
+      sets: 3,
+      reps: "10",
+      xp: 20,
+      level: 1,
+      muscle: ex.target,
+      secondaryMuscles: ex.secondaryMuscles,
+      instructions: ex.instructions,  // pasos detallados
+      gifUrl: ex.gifUrl,              // GIF del ejercicio
+      equipment: ex.equipment,
+      fromApi: true,
+    }));
   } catch {
-    return null; // fallback silently
+    return null;
   }
 }
 
