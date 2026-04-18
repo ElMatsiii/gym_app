@@ -630,6 +630,100 @@ function ExerciseTimer({ exercise, onClose }) {
   );
 }
 
+// ── EXERCISE DETAIL MODAL ─────────────────────────────────────────────────────
+  function ExerciseDetailModal({ exercise, zoneId, onClose, onToggleDone, isDone }) {
+    const [gifLoaded, setGifLoaded] = useState(false);
+    const z = ZONES.find(z => z.id === zoneId);
+
+    return (
+      <div className="ex-detail-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="ex-detail-card">
+          <div className="ex-detail-handle" />
+          <div className="ex-detail-scroll">
+
+            {/* GIF */}
+            <div className="ex-gif-wrap">
+              {exercise.gifUrl ? (
+                <>
+                  {!gifLoaded && (
+                    <div className="ex-gif-placeholder">
+                      <div className="loading-spinner" style={{ width: 24, height: 24 }} />
+                      <span style={{ fontSize: 11 }}>Cargando animación...</span>
+                    </div>
+                  )}
+                  <img
+                    src={exercise.gifUrl}
+                    alt={exercise.name}
+                    onLoad={() => setGifLoaded(true)}
+                    style={{ display: gifLoaded ? "block" : "none" }}
+                  />
+                </>
+              ) : (
+                <div className="ex-gif-placeholder">
+                  <Icon name="muscle" size={40} color="var(--muted)" />
+                  <span style={{ fontSize: 11 }}>Sin animación disponible</span>
+                </div>
+              )}
+            </div>
+
+            {/* Nombre y badges */}
+            <div className="ex-detail-name">{exercise.name}</div>
+            <div className="ex-detail-badges">
+              {exercise.muscle && (
+                <span className="ex-badge ex-badge-muscle">{exercise.muscle}</span>
+              )}
+              {exercise.equipment && (
+                <span className="ex-badge ex-badge-equip">{exercise.equipment}</span>
+              )}
+              {(exercise.secondaryMuscles ?? []).map(m => (
+                <span key={m} className="ex-badge ex-badge-secondary">{m}</span>
+              ))}
+            </div>
+
+            {/* Info rápida */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+              {[
+                { label: "Series", val: exercise.sets },
+                { label: "Reps", val: exercise.reps },
+                { label: "XP", val: `+${exercise.xp}` },
+              ].map(({ label, val }) => (
+                <div key={label} style={{
+                  flex: 1, background: "var(--card2)", border: "1px solid var(--border)",
+                  borderRadius: 10, padding: "10px 8px", textAlign: "center",
+                }}>
+                  <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 20, fontWeight: 700, color: z?.accentDark ?? "var(--accent)" }}>{val}</div>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Instrucciones */}
+            {exercise.instructions?.length > 0 && (
+              <>
+                <div className="ex-section-title">Cómo realizar el ejercicio</div>
+                {exercise.instructions.map((step, i) => (
+                  <div key={i} className="ex-step">
+                    <div className="ex-step-num">{i + 1}</div>
+                    <div className="ex-step-text">{step}</div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* Botón marcar como hecho */}
+            <button
+              className="ex-detail-cta"
+              onClick={() => { onToggleDone(exercise); onClose(); }}
+              style={isDone ? { background: "rgba(74,222,128,.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,.3)" } : {}}
+            >
+              {isDone ? "✓ Completado" : "Marcar como completado"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function FitnessRPG() {
   const [user, setUser]           = useState(null);
@@ -1246,10 +1340,10 @@ export default function FitnessRPG() {
         </div>
 
         <ExerciseList
-          zoneId={zoneId}
+          zoneId={activeZone}
           zoneDone={zoneDone}
-          onToggle={ex => toggleExDay(ex, zoneId)}
-          onOpenDetail={ex => setDetailEx({ exercise: ex, zoneId })}
+          onToggle={ex => toggleExDay(ex, activeZone)}
+          onOpenDetail={ex => setDetailEx({ exercise: ex, zoneId: activeZone })}
         />
 
         {zoneDone.size > 0 && (
@@ -1375,100 +1469,6 @@ export default function FitnessRPG() {
   }
 
   if (!user) return <AuthScreen onAuth={(u) => { setUser(u); loadProfile(u.id); }} />;
-
-  // ── EXERCISE DETAIL MODAL ─────────────────────────────────────────────────────
-  function ExerciseDetailModal({ exercise, zoneId, onClose, onToggleDone, isDone }) {
-    const [gifLoaded, setGifLoaded] = useState(false);
-    const z = ZONES.find(z => z.id === zoneId);
-
-    return (
-      <div className="ex-detail-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="ex-detail-card">
-          <div className="ex-detail-handle" />
-          <div className="ex-detail-scroll">
-
-            {/* GIF */}
-            <div className="ex-gif-wrap">
-              {exercise.gifUrl ? (
-                <>
-                  {!gifLoaded && (
-                    <div className="ex-gif-placeholder">
-                      <div className="loading-spinner" style={{ width: 24, height: 24 }} />
-                      <span style={{ fontSize: 11 }}>Cargando animación...</span>
-                    </div>
-                  )}
-                  <img
-                    src={exercise.gifUrl}
-                    alt={exercise.name}
-                    onLoad={() => setGifLoaded(true)}
-                    style={{ display: gifLoaded ? "block" : "none" }}
-                  />
-                </>
-              ) : (
-                <div className="ex-gif-placeholder">
-                  <Icon name="muscle" size={40} color="var(--muted)" />
-                  <span style={{ fontSize: 11 }}>Sin animación disponible</span>
-                </div>
-              )}
-            </div>
-
-            {/* Nombre y badges */}
-            <div className="ex-detail-name">{exercise.name}</div>
-            <div className="ex-detail-badges">
-              {exercise.muscle && (
-                <span className="ex-badge ex-badge-muscle">{exercise.muscle}</span>
-              )}
-              {exercise.equipment && (
-                <span className="ex-badge ex-badge-equip">{exercise.equipment}</span>
-              )}
-              {(exercise.secondaryMuscles ?? []).map(m => (
-                <span key={m} className="ex-badge ex-badge-secondary">{m}</span>
-              ))}
-            </div>
-
-            {/* Info rápida */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-              {[
-                { label: "Series", val: exercise.sets },
-                { label: "Reps", val: exercise.reps },
-                { label: "XP", val: `+${exercise.xp}` },
-              ].map(({ label, val }) => (
-                <div key={label} style={{
-                  flex: 1, background: "var(--card2)", border: "1px solid var(--border)",
-                  borderRadius: 10, padding: "10px 8px", textAlign: "center",
-                }}>
-                  <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 20, fontWeight: 700, color: z?.accentDark ?? "var(--accent)" }}>{val}</div>
-                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Instrucciones */}
-            {exercise.instructions?.length > 0 && (
-              <>
-                <div className="ex-section-title">Cómo realizar el ejercicio</div>
-                {exercise.instructions.map((step, i) => (
-                  <div key={i} className="ex-step">
-                    <div className="ex-step-num">{i + 1}</div>
-                    <div className="ex-step-text">{step}</div>
-                  </div>
-                ))}
-              </>
-            )}
-
-            {/* Botón marcar como hecho */}
-            <button
-              className="ex-detail-cta"
-              onClick={() => { onToggleDone(exercise); onClose(); }}
-              style={isDone ? { background: "rgba(74,222,128,.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,.3)" } : {}}
-            >
-              {isDone ? "✓ Completado" : "Marcar como completado"}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
   // ── RENDER ───────────────────────────────────────────────────────────────────
   return (
     <div className="frpg">
