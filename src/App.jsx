@@ -566,13 +566,9 @@ function ExerciseTimer({ exercise, onClose }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function FitnessRPG() {
-  const [state, setState] = useState(() => {
-    try {
-      const [user, setUser]   = useState(null);       // usuario de Supabase
-      const [authReady, setAuthReady] = useState(false); // sesión verificada
-      const [state, setState] = useState(DEFAULT_STATE);
-    } catch { return DEFAULT_STATE(); }
-  });
+  const [user, setUser]           = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [state, setState]         = useState(DEFAULT_STATE);
 
   // Exercise cache from API
   const [apiExercises, setApiExercises] = useState({});
