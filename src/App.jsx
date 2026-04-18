@@ -1,92 +1,120 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
+// ─── API CONFIG ───────────────────────────────────────────────────────────────
+// ExerciseDB open-source API (exercisedb.dev) — free, no key required
+const EXERCISEDB_BASE = "https://exercisedb.dev/api";
+
+// Map our zone IDs to ExerciseDB body-part slugs
+const ZONE_TO_BODYPART = {
+  pecho:    "chest",
+  espalda:  "back",
+  piernas:  "upper legs",
+  core:     "waist",
+  cardio:   "cardio",
+  hombros:  "shoulders",
+  brazos:   "upper arms",
+};
+
+// ─── RANKS ───────────────────────────────────────────────────────────────────
 const RANKS = [
-  { name: "Novato",     short: "I",    icon: "N", min: 0,    color: "#6b7280", glow: "#6b728030", next: 200  },
-  { name: "Bronce",     short: "II",   icon: "B", min: 200,  color: "#b87333", glow: "#b8733330", next: 600  },
-  { name: "Plata",      short: "III",  icon: "P", min: 600,  color: "#94a3b8", glow: "#94a3b830", next: 1200 },
-  { name: "Oro",        short: "IV",   icon: "O", min: 1200, color: "#f59e0b", glow: "#f59e0b30", next: 2200 },
-  { name: "Platino",    short: "V",    icon: "L", min: 2200, color: "#38bdf8", glow: "#38bdf830", next: 3500 },
-  { name: "Diamante",   short: "VI",   icon: "D", min: 3500, color: "#c084fc", glow: "#c084fc30", next: 5000 },
-  { name: "Maestro",    short: "VII",  icon: "M", min: 5000, color: "#fb923c", glow: "#fb923c30", next: 7000 },
-  { name: "Gran Élite", short: "VIII", icon: "E", min: 7000, color: "#f43f5e", glow: "#f43f5e40", next: null },
+  { name: "Novato",     short: "I",    min: 0,    color: "#6b7280", next: 200  },
+  { name: "Bronce",     short: "II",   min: 200,  color: "#b87333", next: 600  },
+  { name: "Plata",      short: "III",  min: 600,  color: "#94a3b8", next: 1200 },
+  { name: "Oro",        short: "IV",   min: 1200, color: "#f59e0b", next: 2200 },
+  { name: "Platino",    short: "V",    min: 2200, color: "#38bdf8", next: 3500 },
+  { name: "Diamante",   short: "VI",   min: 3500, color: "#c084fc", next: 5000 },
+  { name: "Maestro",    short: "VII",  min: 5000, color: "#fb923c", next: 7000 },
+  { name: "Gran Élite", short: "VIII", min: 7000, color: "#f43f5e", next: null },
 ];
 
 const ZONES = [
-  { id: "pecho",    label: "Pecho",    accentDark: "#f43f5e", accentLight: "#e11d48", bg: "rgba(244,63,94,0.07)"  },
-  { id: "espalda",  label: "Espalda",  accentDark: "#38bdf8", accentLight: "#0284c7", bg: "rgba(56,189,248,0.07)" },
-  { id: "piernas",  label: "Piernas",  accentDark: "#4ade80", accentLight: "#16a34a", bg: "rgba(74,222,128,0.07)" },
-  { id: "core",     label: "Core",     accentDark: "#f59e0b", accentLight: "#d97706", bg: "rgba(245,158,11,0.07)" },
-  { id: "cardio",   label: "Cardio",   accentDark: "#c084fc", accentLight: "#7c3aed", bg: "rgba(192,132,252,0.07)"},
-  { id: "hombros",  label: "Hombros",  accentDark: "#fb923c", accentLight: "#ea580c", bg: "rgba(251,146,60,0.07)" },
+  { id: "pecho",    label: "Pecho",    accentDark: "#f43f5e", bg: "rgba(244,63,94,0.07)"  },
+  { id: "espalda",  label: "Espalda",  accentDark: "#38bdf8", bg: "rgba(56,189,248,0.07)" },
+  { id: "piernas",  label: "Piernas",  accentDark: "#4ade80", bg: "rgba(74,222,128,0.07)" },
+  { id: "core",     label: "Core",     accentDark: "#f59e0b", bg: "rgba(245,158,11,0.07)" },
+  { id: "cardio",   label: "Cardio",   accentDark: "#c084fc", bg: "rgba(192,132,252,0.07)"},
+  { id: "hombros",  label: "Hombros",  accentDark: "#fb923c", bg: "rgba(251,146,60,0.07)" },
+  { id: "brazos",   label: "Brazos",   accentDark: "#34d399", bg: "rgba(52,211,153,0.07)" },
 ];
 
-const EXERCISES = {
+// ─── FALLBACK EXERCISES (when API unavailable) ────────────────────────────────
+const FALLBACK_EXERCISES = {
   pecho: [
-    { name: "Flexiones",            sets: 3, reps: "12",  xp: 18, level: 1, muscle: "Pectoral Mayor" },
-    { name: "Flexiones diamante",   sets: 3, reps: "10",  xp: 22, level: 2, muscle: "Pectoral / Tríceps" },
-    { name: "Flexiones arqueras",   sets: 3, reps: "8",   xp: 28, level: 3, muscle: "Pectoral Unilateral" },
-    { name: "Press banca barra",    sets: 4, reps: "8",   xp: 35, level: 2, muscle: "Pectoral / Deltoides" },
-    { name: "Press inclinado",      sets: 3, reps: "10",  xp: 30, level: 2, muscle: "Pectoral Superior" },
-    { name: "Aperturas mancuernas", sets: 3, reps: "12",  xp: 22, level: 2, muscle: "Pectoral" },
-    { name: "Fondos en paralelas",  sets: 3, reps: "10",  xp: 32, level: 3, muscle: "Pectoral / Tríceps" },
+    { name: "Flexiones",            sets: 3, reps: "12",  xp: 18, level: 1, muscle: "Pectoral Mayor", timed: false },
+    { name: "Flexiones diamante",   sets: 3, reps: "10",  xp: 22, level: 2, muscle: "Pectoral / Tríceps", timed: false },
+    { name: "Flexiones arqueras",   sets: 3, reps: "8",   xp: 28, level: 3, muscle: "Pectoral Unilateral", timed: false },
+    { name: "Press banca barra",    sets: 4, reps: "8",   xp: 35, level: 2, muscle: "Pectoral / Deltoides", timed: false },
+    { name: "Press inclinado",      sets: 3, reps: "10",  xp: 30, level: 2, muscle: "Pectoral Superior", timed: false },
+    { name: "Aperturas mancuernas", sets: 3, reps: "12",  xp: 22, level: 2, muscle: "Pectoral", timed: false },
+    { name: "Fondos en paralelas",  sets: 3, reps: "10",  xp: 32, level: 3, muscle: "Pectoral / Tríceps", timed: false },
   ],
   espalda: [
-    { name: "Remo con mochila",     sets: 3, reps: "12",  xp: 20, level: 1, muscle: "Dorsal Ancho" },
-    { name: "Superman",             sets: 3, reps: "15",  xp: 12, level: 1, muscle: "Erector Espinal" },
-    { name: "Dominadas asistidas",  sets: 3, reps: "8",   xp: 28, level: 2, muscle: "Dorsal Ancho" },
-    { name: "Dominadas barra",      sets: 4, reps: "6",   xp: 42, level: 3, muscle: "Dorsal / Bíceps" },
-    { name: "Remo con barra",       sets: 4, reps: "10",  xp: 35, level: 2, muscle: "Dorsal / Romboides" },
-    { name: "Jalón al pecho",       sets: 3, reps: "12",  xp: 28, level: 2, muscle: "Dorsal Ancho" },
-    { name: "Peso muerto",          sets: 4, reps: "6",   xp: 48, level: 3, muscle: "Cadena Posterior" },
+    { name: "Remo con mochila",     sets: 3, reps: "12",  xp: 20, level: 1, muscle: "Dorsal Ancho", timed: false },
+    { name: "Superman",             sets: 3, reps: "30s", xp: 15, level: 1, muscle: "Erector Espinal", timed: true, timerSecs: 30 },
+    { name: "Dominadas asistidas",  sets: 3, reps: "8",   xp: 28, level: 2, muscle: "Dorsal Ancho", timed: false },
+    { name: "Dominadas barra",      sets: 4, reps: "6",   xp: 42, level: 3, muscle: "Dorsal / Bíceps", timed: false },
+    { name: "Remo con barra",       sets: 4, reps: "10",  xp: 35, level: 2, muscle: "Dorsal / Romboides", timed: false },
+    { name: "Jalón al pecho",       sets: 3, reps: "12",  xp: 28, level: 2, muscle: "Dorsal Ancho", timed: false },
+    { name: "Peso muerto",          sets: 4, reps: "6",   xp: 48, level: 3, muscle: "Cadena Posterior", timed: false },
   ],
   piernas: [
-    { name: "Sentadillas",          sets: 4, reps: "12",  xp: 22, level: 1, muscle: "Cuádriceps" },
-    { name: "Zancadas",             sets: 3, reps: "10",  xp: 20, level: 1, muscle: "Cuádriceps / Glúteos" },
-    { name: "Puente de glúteos",    sets: 3, reps: "15",  xp: 15, level: 1, muscle: "Glúteos" },
-    { name: "Sentadilla c/barra",   sets: 4, reps: "10",  xp: 40, level: 2, muscle: "Cuádriceps / Glúteos" },
-    { name: "Peso muerto rumano",   sets: 4, reps: "10",  xp: 38, level: 2, muscle: "Isquiotibiales" },
-    { name: "Sentadilla búlgara",   sets: 3, reps: "10",  xp: 35, level: 3, muscle: "Cuádriceps Unilateral" },
-    { name: "Hip thrust barra",     sets: 4, reps: "10",  xp: 42, level: 3, muscle: "Glúteos Mayor" },
-    { name: "Prensa de piernas",    sets: 4, reps: "12",  xp: 30, level: 2, muscle: "Cuádriceps" },
+    { name: "Sentadillas",          sets: 4, reps: "12",  xp: 22, level: 1, muscle: "Cuádriceps", timed: false },
+    { name: "Zancadas",             sets: 3, reps: "10",  xp: 20, level: 1, muscle: "Cuádriceps / Glúteos", timed: false },
+    { name: "Puente de glúteos",    sets: 3, reps: "15",  xp: 15, level: 1, muscle: "Glúteos", timed: false },
+    { name: "Sentadilla c/barra",   sets: 4, reps: "10",  xp: 40, level: 2, muscle: "Cuádriceps / Glúteos", timed: false },
+    { name: "Peso muerto rumano",   sets: 4, reps: "10",  xp: 38, level: 2, muscle: "Isquiotibiales", timed: false },
+    { name: "Sentadilla búlgara",   sets: 3, reps: "10",  xp: 35, level: 3, muscle: "Cuádriceps Unilateral", timed: false },
+    { name: "Hip thrust barra",     sets: 4, reps: "10",  xp: 42, level: 3, muscle: "Glúteos Mayor", timed: false },
   ],
   core: [
-    { name: "Plancha",              sets: 3, reps: "30s", xp: 15, level: 1, muscle: "Core Estabilizador" },
-    { name: "Abdominales",          sets: 3, reps: "20",  xp: 12, level: 1, muscle: "Recto Abdominal" },
-    { name: "Plancha lateral",      sets: 3, reps: "25s", xp: 18, level: 2, muscle: "Oblicuos" },
-    { name: "Mountain climbers",    sets: 3, reps: "20",  xp: 20, level: 1, muscle: "Core / Cardio" },
-    { name: "Elevación de piernas", sets: 3, reps: "15",  xp: 22, level: 2, muscle: "Recto Inferior" },
-    { name: "Rueda abdominal",      sets: 3, reps: "10",  xp: 30, level: 3, muscle: "Core Completo" },
-    { name: "Dragon flag",          sets: 3, reps: "6",   xp: 45, level: 4, muscle: "Core Avanzado" },
-    { name: "Hollow body",          sets: 3, reps: "20s", xp: 28, level: 3, muscle: "Core Estabilizador" },
+    { name: "Plancha",              sets: 3, reps: "30s", xp: 15, level: 1, muscle: "Core Estabilizador", timed: true, timerSecs: 30 },
+    { name: "Abdominales",          sets: 3, reps: "20",  xp: 12, level: 1, muscle: "Recto Abdominal", timed: false },
+    { name: "Plancha lateral",      sets: 3, reps: "25s", xp: 18, level: 2, muscle: "Oblicuos", timed: true, timerSecs: 25 },
+    { name: "Mountain climbers",    sets: 3, reps: "30s", xp: 20, level: 1, muscle: "Core / Cardio", timed: true, timerSecs: 30 },
+    { name: "Elevación de piernas", sets: 3, reps: "15",  xp: 22, level: 2, muscle: "Recto Inferior", timed: false },
+    { name: "Rueda abdominal",      sets: 3, reps: "10",  xp: 30, level: 3, muscle: "Core Completo", timed: false },
+    { name: "Dragon flag",          sets: 3, reps: "6",   xp: 45, level: 4, muscle: "Core Avanzado", timed: false },
+    { name: "Hollow body",          sets: 3, reps: "20s", xp: 28, level: 3, muscle: "Core Estabilizador", timed: true, timerSecs: 20 },
   ],
   cardio: [
-    { name: "Jumping jacks",        sets: 3, reps: "40",  xp: 15, level: 1, muscle: "Cardio Total" },
-    { name: "Saltar en sitio",      sets: 3, reps: "60s", xp: 18, level: 1, muscle: "Cardiovascular" },
-    { name: "High knees",           sets: 3, reps: "30s", xp: 20, level: 1, muscle: "Cardio / Piernas" },
-    { name: "Burpees",              sets: 4, reps: "10",  xp: 32, level: 2, muscle: "Full Body / Cardio" },
-    { name: "Skipping",             sets: 3, reps: "45s", xp: 22, level: 1, muscle: "Coordinación / Cardio" },
-    { name: "Sprint 30m",           sets: 6, reps: "×1",  xp: 28, level: 2, muscle: "Velocidad" },
-    { name: "Box jumps",            sets: 4, reps: "8",   xp: 35, level: 3, muscle: "Potencia / Cardio" },
-    { name: "Battle ropes",         sets: 4, reps: "30s", xp: 30, level: 2, muscle: "Full Body" },
+    { name: "Jumping jacks",        sets: 3, reps: "45s", xp: 15, level: 1, muscle: "Cardio Total", timed: true, timerSecs: 45 },
+    { name: "Saltar en sitio",      sets: 3, reps: "60s", xp: 18, level: 1, muscle: "Cardiovascular", timed: true, timerSecs: 60 },
+    { name: "High knees",           sets: 3, reps: "30s", xp: 20, level: 1, muscle: "Cardio / Piernas", timed: true, timerSecs: 30 },
+    { name: "Burpees",              sets: 4, reps: "10",  xp: 32, level: 2, muscle: "Full Body / Cardio", timed: false },
+    { name: "Skipping",             sets: 3, reps: "45s", xp: 22, level: 1, muscle: "Coordinación / Cardio", timed: true, timerSecs: 45 },
+    { name: "Box jumps",            sets: 4, reps: "8",   xp: 35, level: 3, muscle: "Potencia / Cardio", timed: false },
+    { name: "Battle ropes",         sets: 4, reps: "30s", xp: 30, level: 2, muscle: "Full Body", timed: true, timerSecs: 30 },
   ],
   hombros: [
-    { name: "Press militar",        sets: 4, reps: "10",  xp: 30, level: 2, muscle: "Deltoides Anterior" },
-    { name: "Elevaciones laterales",sets: 3, reps: "15",  xp: 20, level: 1, muscle: "Deltoides Lateral" },
-    { name: "Elevaciones frontales",sets: 3, reps: "12",  xp: 18, level: 1, muscle: "Deltoides Anterior" },
-    { name: "Face pulls",           sets: 3, reps: "15",  xp: 22, level: 2, muscle: "Deltoides Posterior" },
-    { name: "Arnold press",         sets: 4, reps: "10",  xp: 32, level: 2, muscle: "Deltoides 360°" },
-    { name: "Remo al mentón",       sets: 3, reps: "12",  xp: 25, level: 2, muscle: "Deltoides / Trapecios" },
+    { name: "Press militar",        sets: 4, reps: "10",  xp: 30, level: 2, muscle: "Deltoides Anterior", timed: false },
+    { name: "Elevaciones laterales",sets: 3, reps: "15",  xp: 20, level: 1, muscle: "Deltoides Lateral", timed: false },
+    { name: "Elevaciones frontales",sets: 3, reps: "12",  xp: 18, level: 1, muscle: "Deltoides Anterior", timed: false },
+    { name: "Face pulls",           sets: 3, reps: "15",  xp: 22, level: 2, muscle: "Deltoides Posterior", timed: false },
+    { name: "Arnold press",         sets: 4, reps: "10",  xp: 32, level: 2, muscle: "Deltoides 360°", timed: false },
+    { name: "Remo al mentón",       sets: 3, reps: "12",  xp: 25, level: 2, muscle: "Deltoides / Trapecios", timed: false },
+  ],
+  brazos: [
+    { name: "Curl bíceps mancuernas", sets: 3, reps: "12", xp: 18, level: 1, muscle: "Bíceps", timed: false },
+    { name: "Curl martillo",         sets: 3, reps: "10", xp: 20, level: 1, muscle: "Bíceps / Braquial", timed: false },
+    { name: "Curl concentrado",      sets: 3, reps: "12", xp: 22, level: 2, muscle: "Bíceps Pico", timed: false },
+    { name: "Press francés",         sets: 3, reps: "10", xp: 25, level: 2, muscle: "Tríceps", timed: false },
+    { name: "Extensión tríceps polea",sets: 3, reps: "15", xp: 20, level: 1, muscle: "Tríceps", timed: false },
+    { name: "Fondos banco tríceps",   sets: 3, reps: "12", xp: 22, level: 2, muscle: "Tríceps", timed: false },
+    { name: "Curl barra Z",          sets: 4, reps: "10", xp: 28, level: 2, muscle: "Bíceps", timed: false },
+    { name: "Curl inclinado",        sets: 3, reps: "10", xp: 30, level: 3, muscle: "Bíceps Largo", timed: false },
+    { name: "Skull crushers",        sets: 3, reps: "10", xp: 35, level: 3, muscle: "Tríceps", timed: false },
+    { name: "Curl 21s",              sets: 3, reps: "21", xp: 38, level: 3, muscle: "Bíceps Completo", timed: false },
   ],
 };
 
 const DAILY = [
-  { day: "Lunes",     zones: ["pecho",   "hombros"],  label: "Push — Pecho & Hombros",   type: "push"  },
-  { day: "Martes",    zones: ["piernas", "cardio"],   label: "Piernas & Cardio",           type: "legs"  },
-  { day: "Miércoles", zones: ["espalda", "core"],     label: "Pull — Espalda & Core",      type: "pull"  },
-  { day: "Jueves",    zones: ["cardio",  "core"],     label: "Cardio & Core",              type: "cardio"},
-  { day: "Viernes",   zones: ["pecho",   "espalda"],  label: "Push + Pull Intensivo",      type: "full"  },
-  { day: "Sábado",    zones: ["piernas", "hombros"],  label: "Piernas & Hombros",          type: "legs"  },
-  { day: "Domingo",   zones: [],                      label: "Descanso Activo",            type: "rest"  },
+  { day: "Lunes",     zones: ["pecho",   "hombros"],  label: "Push — Pecho & Hombros",    type: "push"  },
+  { day: "Martes",    zones: ["piernas", "cardio"],   label: "Piernas & Cardio",            type: "legs"  },
+  { day: "Miércoles", zones: ["espalda", "brazos"],   label: "Pull — Espalda & Brazos",     type: "pull"  },
+  { day: "Jueves",    zones: ["cardio",  "core"],     label: "Cardio & Core",               type: "cardio"},
+  { day: "Viernes",   zones: ["pecho",   "espalda"],  label: "Push + Pull Intensivo",       type: "full"  },
+  { day: "Sábado",    zones: ["piernas", "hombros", "brazos"], label: "Piernas & Brazos",   type: "legs"  },
+  { day: "Domingo",   zones: [],                      label: "Descanso Activo",             type: "rest"  },
 ];
 
 const getRank     = xp => [...RANKS].reverse().find(r => xp >= r.min) ?? RANKS[0];
@@ -96,25 +124,68 @@ const xpPct       = xp => {
   if (!n) return 100;
   return Math.round(((xp - r.min) / (n.min - r.min)) * 100);
 };
+
 const DEFAULT_STATE = () => ({
   xp: Object.fromEntries(ZONES.map(z => [z.id, 0])),
   streak: 0, lastTrainedDate: null, totalSessions: 0,
   log: [], achievements: [], weeklyGoal: 4, weekSessions: 0,
-  weekStart: null, personalBests: {},
+  weekStart: null,
 });
 
 const ACHIEVEMENTS = [
-  { id: "first_session",   name: "Primer Paso",       desc: "Completa tu primera sesión",         icon: "star",    cond: s => s.totalSessions >= 1 },
-  { id: "week_streak",     name: "Semana Perfecta",   desc: "Entrena 7 días seguidos",             icon: "flame",   cond: s => s.streak >= 7 },
-  { id: "iron_body",       name: "Cuerpo de Hierro",  desc: "Alcanza Bronce en 3 zonas",          icon: "shield",  cond: s => Object.values(s.xp).filter(x => x >= 200).length >= 3 },
-  { id: "centurion",       name: "Centurión",         desc: "Acumula 1,000 XP en total",          icon: "trophy",  cond: s => Object.values(s.xp).reduce((a,b)=>a+b,0) >= 1000 },
-  { id: "gold_zone",       name: "Zona Dorada",       desc: "Llega a Oro en cualquier zona",      icon: "star",    cond: s => Object.values(s.xp).some(x => x >= 1200) },
-  { id: "sessions_10",     name: "Veterano",          desc: "Completa 10 sesiones",               icon: "swords",  cond: s => s.totalSessions >= 10 },
-  { id: "sessions_25",     name: "Guerrero",          desc: "Completa 25 sesiones",               icon: "swords",  cond: s => s.totalSessions >= 25 },
-  { id: "all_zones",       name: "Completo",          desc: "Entrena todas las zonas",            icon: "muscle",  cond: s => Object.values(s.xp).every(x => x > 0) },
-  { id: "platinum_any",    name: "Élite Emergente",   desc: "Llega a Platino en cualquier zona",  icon: "trophy",  cond: s => Object.values(s.xp).some(x => x >= 2200) },
+  { id: "first_session",  name: "Primer Paso",      desc: "Completa tu primera sesión",        icon: "star",   cond: s => s.totalSessions >= 1 },
+  { id: "week_streak",    name: "Semana Perfecta",  desc: "Entrena 7 días seguidos",            icon: "flame",  cond: s => s.streak >= 7 },
+  { id: "iron_body",      name: "Cuerpo de Hierro", desc: "Alcanza Bronce en 3 zonas",         icon: "shield", cond: s => Object.values(s.xp).filter(x => x >= 200).length >= 3 },
+  { id: "centurion",      name: "Centurión",        desc: "Acumula 1,000 XP en total",         icon: "trophy", cond: s => Object.values(s.xp).reduce((a,b)=>a+b,0) >= 1000 },
+  { id: "gold_zone",      name: "Zona Dorada",      desc: "Llega a Oro en cualquier zona",     icon: "star",   cond: s => Object.values(s.xp).some(x => x >= 1200) },
+  { id: "sessions_10",    name: "Veterano",         desc: "Completa 10 sesiones",              icon: "swords", cond: s => s.totalSessions >= 10 },
+  { id: "sessions_25",    name: "Guerrero",         desc: "Completa 25 sesiones",              icon: "swords", cond: s => s.totalSessions >= 25 },
+  { id: "all_zones",      name: "Completo",         desc: "Entrena todas las zonas",           icon: "muscle", cond: s => Object.values(s.xp).every(x => x > 0) },
+  { id: "platinum_any",   name: "Élite Emergente",  desc: "Llega a Platino en cualquier zona", icon: "trophy", cond: s => Object.values(s.xp).some(x => x >= 2200) },
+  { id: "arm_day",        name: "Brazo de Hierro",  desc: "Completa 5 sesiones de brazos",     icon: "muscle", cond: s => s.log && s.log.filter(l => l.zones?.includes("brazos") || l.zone === "brazos").length >= 5 },
 ];
 
+// ─── API HELPERS ──────────────────────────────────────────────────────────────
+async function fetchExercisesForZone(zoneId) {
+  const bodyPart = ZONE_TO_BODYPART[zoneId];
+  if (!bodyPart) return null;
+  try {
+    const res = await fetch(
+      `${EXERCISEDB_BASE}/exercises/bodyPart/${encodeURIComponent(bodyPart)}?limit=15&offset=0`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) throw new Error("API error");
+    const data = await res.json();
+    const exercises = (data.data ?? data);
+    if (!Array.isArray(exercises) || exercises.length === 0) return null;
+
+    // Transform API response → our format
+    return exercises.slice(0, 10).map((ex, i) => {
+      const isCardio = ex.bodyPart === "cardio" || ex.equipment === "body weight" && ex.target === "cardiovascular system";
+      const hasTimer = ex.name && /plank|hold|static|isometric|wall sit|superman/i.test(ex.name);
+      const timerSecs = hasTimer ? 30 : null;
+      const diffWords = ex.name?.split(" ").length ?? 1;
+      const lvl = diffWords <= 2 ? 1 : diffWords === 3 ? 2 : diffWords <= 5 ? 3 : 4;
+      return {
+        name: ex.name ?? `Ejercicio ${i + 1}`,
+        sets: lvl <= 1 ? 3 : 4,
+        reps: hasTimer ? `${timerSecs}s` : isCardio ? "45s" : lvl === 1 ? "12" : lvl === 2 ? "10" : "8",
+        xp: 15 + lvl * 7 + (i % 3) * 3,
+        level: Math.min(lvl, 3),
+        muscle: ex.target ? ex.target.replace(/-/g, " ") : ex.bodyPart ?? zoneId,
+        timed: hasTimer || (isCardio && ex.name?.toLowerCase().includes("jump")),
+        timerSecs: hasTimer ? timerSecs : isCardio ? 45 : null,
+        gifUrl: ex.gifUrl ?? null,
+        apiId: ex.id ?? null,
+        fromApi: true,
+      };
+    });
+  } catch {
+    return null; // fallback silently
+  }
+}
+
+// ─── STYLES ──────────────────────────────────────────────────────────────────
 const STYLES = `
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -160,7 +231,7 @@ const STYLES = `
 .today-name{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--accent);}
 .today-sub{font-size:11px;color:var(--muted2);margin-top:2px;}
 .today-arrow{width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.25);display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0;}
-.today-zones{display:flex;padding:10px 16px;gap:8px;border-top:1px solid rgba(245,158,11,.1);background:rgba(245,158,11,.03);}
+.today-zones{display:flex;flex-wrap:wrap;padding:10px 16px;gap:8px;border-top:1px solid rgba(245,158,11,.1);background:rgba(245,158,11,.03);}
 .today-zone-badge{padding:4px 12px;border-radius:100px;font-size:11px;font-weight:600;background:rgba(255,255,255,0.05);border:1px solid var(--border2);color:var(--muted2);}
 .wstrip{display:flex;gap:5px;}
 .wday{flex:1;border-radius:10px;padding:8px 4px;text-align:center;border:1px solid var(--border);background:var(--card);font-size:10px;font-weight:600;color:var(--muted);}
@@ -180,10 +251,11 @@ const STYLES = `
 .z-bar{height:2px;background:rgba(255,255,255,.05);border-radius:2px;margin-top:8px;}
 .z-bar-fill{height:100%;border-radius:2px;transition:width .7s ease;}
 .z-xp{font-size:10px;color:var(--muted);margin-top:4px;}
-.exitem{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:12px;border:1px solid var(--border);background:var(--card);cursor:pointer;transition:all .18s;margin-bottom:6px;}
+.api-badge{font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);color:#38bdf8;margin-top:4px;display:inline-block;}
+.exitem{display:flex;align-items:flex-start;gap:12px;padding:13px 16px;border-radius:12px;border:1px solid var(--border);background:var(--card);cursor:pointer;transition:all .18s;margin-bottom:6px;}
 .exitem:hover{border-color:var(--border2);background:var(--card2);}
 .exitem.done{background:rgba(74,222,128,.04);border-color:rgba(74,222,128,.2);}
-.excheck{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;}
+.excheck{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;margin-top:2px;}
 .exitem.done .excheck{background:#4ade80;border-color:#4ade80;}
 .exname{font-weight:500;font-size:14px;color:var(--text);}
 .exitem.done .exname{color:var(--muted);text-decoration:line-through;}
@@ -195,16 +267,12 @@ const STYLES = `
 .ex-level.l2{background:rgba(245,158,11,.1);color:#f59e0b;border:1px solid rgba(245,158,11,.2);}
 .ex-level.l3{background:rgba(248,113,113,.1);color:#f87171;border:1px solid rgba(248,113,113,.2);}
 .ex-level.l4{background:rgba(192,132,252,.1);color:#c084fc;border:1px solid rgba(192,132,252,.2);}
-
-/* Zone section in day view - collapsible header */
-.zone-section-hdr{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:12px 16px;border-radius:12px;border:1px solid var(--border);
-  background:var(--card2);cursor:pointer;margin-bottom:6px;transition:border-color .2s;
-}
+.ex-timer-btn{display:flex;align-items:center;gap:4px;margin-top:5px;padding:4px 9px;border-radius:6px;border:1px solid rgba(56,189,248,0.3);background:rgba(56,189,248,0.06);color:#38bdf8;font-size:10px;font-weight:600;cursor:pointer;width:fit-content;}
+.ex-timer-btn:hover{background:rgba(56,189,248,0.12);}
+.ex-timer-btn.running{border-color:rgba(249,115,22,0.4);background:rgba(249,115,22,0.08);color:#fb923c;}
+.zone-section-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:12px;border:1px solid var(--border);background:var(--card2);cursor:pointer;margin-bottom:6px;transition:border-color .2s;}
 .zone-section-hdr.open{border-color:var(--border2);border-radius:12px 12px 0 0;margin-bottom:0;}
 .zone-section-body{border:1px solid var(--border2);border-top:none;border-radius:0 0 12px 12px;padding:8px 8px;margin-bottom:8px;background:rgba(255,255,255,.01);}
-
 .back{display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:var(--muted2);font-size:13px;font-weight:500;padding:0;margin-bottom:18px;transition:color .2s;}
 .back:hover{color:var(--text);}
 .save-btn{width:100%;padding:15px;border-radius:13px;border:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;text-transform:uppercase;background:linear-gradient(135deg,#f59e0b,#f97316);color:#07090f;transition:opacity .2s,transform .15s;margin-top:8px;}
@@ -264,18 +332,40 @@ const STYLES = `
 .goal-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,#f59e0b,#f97316);transition:width .7s ease;}
 .goal-meta{display:flex;justify-content:space-between;margin-top:5px;font-size:10px;color:var(--muted);}
 .goal-meta b{color:var(--text);}
-
-/* Day summary bar in day view */
-.day-summary{
-  display:flex;align-items:center;justify-content:space-between;
-  background:var(--card);border:1px solid var(--border2);border-radius:13px;
-  padding:14px 16px;margin-bottom:16px;
-}
+.day-summary{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border2);border-radius:13px;padding:14px 16px;margin-bottom:16px;}
 .day-xp-counter{text-align:right;}
 .day-xp-val{font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:var(--accent);line-height:1;}
 .day-xp-lbl{font-size:10px;color:var(--muted);}
+.loading-ex{display:flex;align-items:center;gap:8px;padding:12px 16px;border-radius:12px;border:1px solid var(--border);background:var(--card);margin-bottom:6px;color:var(--muted);font-size:12px;}
+.loading-spinner{width:14px;height:14px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.api-source{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted2);padding:6px 0;margin-bottom:4px;}
+
+/* ── TIMER MODAL ── */
+.timer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;z-index:200;padding:24px;backdrop-filter:blur(16px);animation:fin .2s ease;}
+.timer-card{background:var(--card);border:1px solid rgba(56,189,248,.25);border-radius:24px;padding:36px 28px;text-align:center;max-width:300px;width:100%;animation:sin .28s cubic-bezier(.34,1.56,.64,1);}
+.timer-name{font-size:13px;font-weight:600;color:var(--muted2);margin-bottom:8px;letter-spacing:.04em;}
+.timer-ring{width:140px;height:140px;margin:0 auto 20px;position:relative;}
+.timer-ring svg{width:140px;height:140px;transform:rotate(-90deg);}
+.timer-ring-bg{fill:none;stroke:rgba(255,255,255,.05);stroke-width:8;}
+.timer-ring-fill{fill:none;stroke:#38bdf8;stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset .5s linear, stroke .3s;}
+.timer-ring.done .timer-ring-fill{stroke:#4ade80;}
+.timer-number{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-size:42px;font-weight:700;color:var(--text);}
+.timer-number.done-txt{color:#4ade80;}
+.timer-set{font-size:12px;color:var(--muted2);margin-bottom:20px;}
+.timer-controls{display:flex;gap:10px;justify-content:center;}
+.timer-btn{padding:10px 22px;border-radius:100px;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .2s;}
+.timer-btn-start{background:#38bdf8;color:#060810;border:none;}
+.timer-btn-start.paused{background:#f59e0b;}
+.timer-btn-reset{background:none;border:1px solid var(--border2);color:var(--muted2);}
+.timer-btn-close{background:none;border:1px solid rgba(74,222,128,.3);color:#4ade80;}
+.timer-sets-track{display:flex;gap:6px;justify-content:center;margin-bottom:16px;}
+.timer-set-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.1);border:1px solid var(--border2);transition:all .3s;}
+.timer-set-dot.done{background:#4ade80;border-color:#4ade80;}
+.timer-set-dot.current{background:rgba(56,189,248,.4);border-color:#38bdf8;}
 `;
 
+// ─── ICONS ───────────────────────────────────────────────────────────────────
 const Icon = ({ name, size = 20, color = "currentColor", strokeWidth = 1.7 }) => {
   const paths = {
     home:    "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10",
@@ -286,19 +376,21 @@ const Icon = ({ name, size = 20, color = "currentColor", strokeWidth = 1.7 }) =>
     flame:   "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z",
     star:    "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
     muscle:  "M6.5 6.5c2-2 5.5-2 5.5 2v7c0 3-2 4.5-5.5 4.5S2 18.5 2 16V9C2 7.5 3 6 5 6M17.5 6.5c-2-2-5.5-2-5.5 2M12 6v6M17.5 6.5C19.5 8 22 9.5 22 12v2c0 2.5-2 4-4.5 4S13 16.5 13 14V8.5",
-    heart:   "M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z",
     shield:  "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
     swords:  "M14.5 17.5L3 6V3h3l11.5 11.5M13 19l2-2M3 21l3.5-3.5M21 3L3 21",
-    run:     "M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M5.2 19L8 14.5l3 2 4.5-9L19 19M8 14.5l2-5",
-    dumbbell:"M6.5 6.5h.01M17.5 6.5h.01M6.5 17.5h.01M17.5 17.5h.01M2 12h4m12 0h4M6 6.5V17.5M18 6.5V17.5M6 12h12",
-    calendar:"M8 2v4M16 2v4M3 10h18M3 6h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z",
     check:   "M20 6L9 17l-5-5",
     arrow:   "M5 12h14M12 5l7 7-7 7",
-    close:   "M18 6L6 18M6 6l12 12",
     back:    "M19 12H5M12 19l-7-7 7-7",
     clock:   "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 6v6l4 2",
     lock:    "M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zM7 11V7a5 5 0 0 1 10 0v4",
     chevron: "M6 9l6 6 6-6",
+    timer:   "M10 2h4M12 14l4-4M6.3 6.3A8 8 0 1 0 17.7 17.7",
+    pause:   "M6 4h4v16H6zM14 4h4v16h-4z",
+    play:    "M5 3l14 9-14 9V3z",
+    refresh: "M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15",
+    wifi:    "M1.42 9A16 16 0 0 1 22.58 9M5.51 12.95a10 10 0 0 1 12.98 0M10.98 17a5.01 5.01 0 0 1 2.04 0M12 20h.01",
+    calendar:"M8 2v4M16 2v4M3 10h18M3 6h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z",
+    close:   "M18 6L6 18M6 6l12 12",
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -310,53 +402,21 @@ const Icon = ({ name, size = 20, color = "currentColor", strokeWidth = 1.7 }) =>
   );
 };
 
+// ─── ZONE ILLUSTRATION ────────────────────────────────────────────────────────
 const ZoneIllustration = ({ zoneId, size = 40, color = "#ffffff" }) => {
   const illustrations = {
-    pecho: (
-      <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-        <circle cx="20" cy="20" r="18" fill="rgba(244,63,94,0.12)" stroke="rgba(244,63,94,0.3)" strokeWidth="1"/>
-        <path d="M10 18c0-4 3-7 6-7 2 0 3 1 4 2 1-1 2-2 4-2 3 0 6 3 6 7 0 5-5 9-10 11C15 27 10 23 10 18z" fill={color} fillOpacity="0.9"/>
-        <path d="M20 13v16" stroke="rgba(0,0,0,0.15)" strokeWidth="1" strokeLinecap="round"/>
-      </svg>
-    ),
-    espalda: (
-      <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-        <circle cx="20" cy="20" r="18" fill="rgba(56,189,248,0.12)" stroke="rgba(56,189,248,0.3)" strokeWidth="1"/>
-        <path d="M14 11h12v4l2 3-2 3v8H14v-8l-2-3 2-3V11z" fill={color} fillOpacity="0.9"/>
-        <path d="M14 15h12M14 21h12M20 11v18" stroke="rgba(0,0,0,0.15)" strokeWidth="1" strokeLinecap="round"/>
-      </svg>
-    ),
-    piernas: (
-      <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-        <circle cx="20" cy="20" r="18" fill="rgba(74,222,128,0.12)" stroke="rgba(74,222,128,0.3)" strokeWidth="1"/>
-        <path d="M15 10h10l-2 10 3 10h-4l-2-8-2 8h-4l3-10L15 10z" fill={color} fillOpacity="0.9"/>
-      </svg>
-    ),
-    core: (
-      <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-        <circle cx="20" cy="20" r="18" fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.3)" strokeWidth="1"/>
-        <rect x="14" y="11" width="12" height="18" rx="3" fill={color} fillOpacity="0.9"/>
-        <path d="M14 16h12M14 20h12M14 24h12" stroke="rgba(0,0,0,0.2)" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-    ),
-    cardio: (
-      <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-        <circle cx="20" cy="20" r="18" fill="rgba(192,132,252,0.12)" stroke="rgba(192,132,252,0.3)" strokeWidth="1"/>
-        <path d="M8 20h5l3-7 4 14 3-9 2 4 4-2" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" strokeOpacity="0.9"/>
-      </svg>
-    ),
-    hombros: (
-      <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-        <circle cx="20" cy="20" r="18" fill="rgba(251,146,60,0.12)" stroke="rgba(251,146,60,0.3)" strokeWidth="1"/>
-        <circle cx="20" cy="15" r="5" fill={color} fillOpacity="0.9"/>
-        <path d="M10 25c0-4 4-6 10-6s10 2 10 6" fill={color} fillOpacity="0.7"/>
-        <path d="M8 22l4-3M32 22l-4-3" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeOpacity="0.9"/>
-      </svg>
-    ),
+    pecho:   (<svg width={size} height={size} viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" fill="rgba(244,63,94,0.12)" stroke="rgba(244,63,94,0.3)" strokeWidth="1"/><path d="M10 18c0-4 3-7 6-7 2 0 3 1 4 2 1-1 2-2 4-2 3 0 6 3 6 7 0 5-5 9-10 11C15 27 10 23 10 18z" fill={color} fillOpacity="0.9"/><path d="M20 13v16" stroke="rgba(0,0,0,0.15)" strokeWidth="1" strokeLinecap="round"/></svg>),
+    espalda: (<svg width={size} height={size} viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" fill="rgba(56,189,248,0.12)" stroke="rgba(56,189,248,0.3)" strokeWidth="1"/><path d="M14 11h12v4l2 3-2 3v8H14v-8l-2-3 2-3V11z" fill={color} fillOpacity="0.9"/><path d="M14 15h12M14 21h12M20 11v18" stroke="rgba(0,0,0,0.15)" strokeWidth="1" strokeLinecap="round"/></svg>),
+    piernas: (<svg width={size} height={size} viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" fill="rgba(74,222,128,0.12)" stroke="rgba(74,222,128,0.3)" strokeWidth="1"/><path d="M15 10h10l-2 10 3 10h-4l-2-8-2 8h-4l3-10L15 10z" fill={color} fillOpacity="0.9"/></svg>),
+    core:    (<svg width={size} height={size} viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" fill="rgba(245,158,11,0.12)" stroke="rgba(245,158,11,0.3)" strokeWidth="1"/><rect x="14" y="11" width="12" height="18" rx="3" fill={color} fillOpacity="0.9"/><path d="M14 16h12M14 20h12M14 24h12" stroke="rgba(0,0,0,0.2)" strokeWidth="1.5" strokeLinecap="round"/></svg>),
+    cardio:  (<svg width={size} height={size} viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" fill="rgba(192,132,252,0.12)" stroke="rgba(192,132,252,0.3)" strokeWidth="1"/><path d="M8 20h5l3-7 4 14 3-9 2 4 4-2" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" strokeOpacity="0.9"/></svg>),
+    hombros: (<svg width={size} height={size} viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" fill="rgba(251,146,60,0.12)" stroke="rgba(251,146,60,0.3)" strokeWidth="1"/><circle cx="20" cy="15" r="5" fill={color} fillOpacity="0.9"/><path d="M10 25c0-4 4-6 10-6s10 2 10 6" fill={color} fillOpacity="0.7"/><path d="M8 22l4-3M32 22l-4-3" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeOpacity="0.9"/></svg>),
+    brazos:  (<svg width={size} height={size} viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" fill="rgba(52,211,153,0.12)" stroke="rgba(52,211,153,0.3)" strokeWidth="1"/><path d="M14 28c0-6 2-10 4-12l2-4 2 4c2 2 4 6 4 12" fill={color} fillOpacity="0.8"/><path d="M16 18c1-2 6-2 8 0" stroke="rgba(0,0,0,0.2)" strokeWidth="1.5" strokeLinecap="round"/><circle cx="20" cy="12" r="3" fill={color} fillOpacity="0.7"/></svg>),
   };
   return illustrations[zoneId] ?? <div style={{width:size,height:size}}/>;
 };
 
+// ─── RANK BADGE ───────────────────────────────────────────────────────────────
 const RankBadge = ({ rank, size = 32 }) => {
   const colors = {
     "Novato":     { bg: "#1f2937", border: "#6b7280", text: "#9ca3af" },
@@ -375,7 +435,7 @@ const RankBadge = ({ rank, size = 32 }) => {
       background: c.bg, border: `2px solid ${c.border}`,
       display: "flex", alignItems: "center", justifyContent: "center",
       fontSize: size * 0.3, fontWeight: 700, color: c.text,
-      fontFamily: "'Rajdhani',sans-serif", letterSpacing: 0, flexShrink: 0,
+      fontFamily: "'Rajdhani',sans-serif", flexShrink: 0,
       boxShadow: `0 0 12px ${c.border}40`,
     }}>
       {rank.short}
@@ -383,24 +443,149 @@ const RankBadge = ({ rank, size = 32 }) => {
   );
 };
 
+// ─── EXERCISE TIMER MODAL ─────────────────────────────────────────────────────
+function ExerciseTimer({ exercise, onClose }) {
+  const totalSecs = exercise.timerSecs ?? 30;
+  const totalSets = exercise.sets ?? 3;
+  const [currentSet, setCurrentSet] = useState(1);
+  const [timeLeft, setTimeLeft] = useState(totalSecs);
+  const [running, setRunning] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const [allDone, setAllDone] = useState(false);
+  const intervalRef = useRef(null);
+
+  const circumference = 2 * Math.PI * 56; // r=56
+  const progress = (timeLeft / totalSecs);
+  const dashOffset = circumference * (1 - progress);
+
+  useEffect(() => {
+    if (running && !finished) {
+      intervalRef.current = setInterval(() => {
+        setTimeLeft(t => {
+          if (t <= 1) {
+            clearInterval(intervalRef.current);
+            setRunning(false);
+            setFinished(true);
+            return 0;
+          }
+          return t - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(intervalRef.current);
+  }, [running, finished]);
+
+  function handleNextSet() {
+    if (currentSet >= totalSets) {
+      setAllDone(true);
+    } else {
+      setCurrentSet(s => s + 1);
+      setTimeLeft(totalSecs);
+      setFinished(false);
+      setRunning(false);
+    }
+  }
+
+  function handleReset() {
+    clearInterval(intervalRef.current);
+    setTimeLeft(totalSecs);
+    setRunning(false);
+    setFinished(false);
+  }
+
+  const mins = Math.floor(timeLeft / 60);
+  const secs = timeLeft % 60;
+  const timeStr = mins > 0 ? `${mins}:${String(secs).padStart(2,"0")}` : `${secs}`;
+
+  return (
+    <div className="timer-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="timer-card">
+        <div className="timer-name">{exercise.name.toUpperCase()}</div>
+
+        {/* Set dots */}
+        <div className="timer-sets-track">
+          {Array.from({ length: totalSets }, (_, i) => (
+            <div key={i} className={`timer-set-dot${i < currentSet - 1 ? " done" : i === currentSet - 1 ? " current" : ""}`} />
+          ))}
+        </div>
+        <div className="timer-set">
+          {allDone ? "¡Ejercicio completado!" : `Serie ${currentSet} de ${totalSets}`}
+        </div>
+
+        {/* Ring */}
+        {!allDone && (
+          <div className={`timer-ring${finished ? " done" : ""}`}>
+            <svg viewBox="0 0 120 120">
+              <circle className="timer-ring-bg" cx="60" cy="60" r="56"/>
+              <circle
+                className="timer-ring-fill"
+                cx="60" cy="60" r="56"
+                strokeDasharray={circumference}
+                strokeDashoffset={dashOffset}
+                style={{ stroke: finished ? "#4ade80" : "#38bdf8" }}
+              />
+            </svg>
+            <div className={`timer-number${finished ? " done-txt" : ""}`}>{timeStr}</div>
+          </div>
+        )}
+
+        {allDone && (
+          <div style={{ fontSize: 48, marginBottom: 20 }}>
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto", display: "block" }}>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+          </div>
+        )}
+
+        <div className="timer-controls">
+          {!allDone ? (
+            <>
+              {!finished ? (
+                <button
+                  className={`timer-btn timer-btn-start${!running && timeLeft < totalSecs ? " paused" : ""}`}
+                  onClick={() => setRunning(r => !r)}
+                >
+                  {running ? "Pausar" : timeLeft === totalSecs ? "Iniciar" : "Reanudar"}
+                </button>
+              ) : (
+                <button className="timer-btn timer-btn-close" onClick={handleNextSet}>
+                  {currentSet >= totalSets ? "Finalizar" : "Siguiente serie →"}
+                </button>
+              )}
+              <button className="timer-btn timer-btn-reset" onClick={handleReset}>Reset</button>
+            </>
+          ) : (
+            <button className="timer-btn timer-btn-close" onClick={onClose}>Cerrar ✓</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function FitnessRPG() {
   const [state, setState] = useState(() => {
     try {
-      const s = localStorage.getItem("frpg-v4");
+      const s = localStorage.getItem("frpg-v5");
       return s ? { ...DEFAULT_STATE(), ...JSON.parse(s) } : DEFAULT_STATE();
     } catch { return DEFAULT_STATE(); }
   });
 
-  // view: "home" | "routine" | "day" | "zone" | "stats"
-  const [view, setView]             = useState("home");
-  const [activeDayIdx, setActiveDayIdx] = useState(null); // for "day" view
-  const [activeZone, setActiveZone] = useState(null);     // for "zone" view
-  // done tracks completed exercises: key = zoneId, value = Set of exercise names
-  const [done, setDone]             = useState({});
+  // Exercise cache from API
+  const [apiExercises, setApiExercises] = useState({});
+  const [apiLoading, setApiLoading]     = useState({});
+  const [apiStatus, setApiStatus]       = useState("unknown"); // "ok" | "offline" | "unknown"
+
+  const [view, setView]               = useState("home");
+  const [activeDayIdx, setActiveDayIdx] = useState(null);
+  const [activeZone, setActiveZone]   = useState(null);
+  const [done, setDone]               = useState({});
   const [openZoneSections, setOpenZoneSections] = useState({});
-  const [toast, setToast]           = useState(null);
-  const [rankUp, setRankUp]         = useState(null);
-  const [achToast, setAchToast]     = useState(null);
+  const [toast, setToast]             = useState(null);
+  const [rankUp, setRankUp]           = useState(null);
+  const [achToast, setAchToast]       = useState(null);
+  const [activeTimer, setActiveTimer] = useState(null); // exercise object
 
   useEffect(() => {
     const el = document.createElement("style");
@@ -410,7 +595,7 @@ export default function FitnessRPG() {
   }, []);
 
   useEffect(() => {
-    try { localStorage.setItem("frpg-v4", JSON.stringify(state)); } catch {}
+    try { localStorage.setItem("frpg-v5", JSON.stringify(state)); } catch {}
   }, [state]);
 
   useEffect(() => {
@@ -421,11 +606,31 @@ export default function FitnessRPG() {
       setAchToast(newOnes[0]);
       setTimeout(() => setAchToast(null), 3500);
     }
-  }, [state.xp, state.totalSessions, state.streak]);
+  }, [state.xp, state.totalSessions, state.streak, state.log]);
 
-  const dayIdx  = new Date().getDay();
-  const ridx    = dayIdx === 0 ? 6 : dayIdx - 1;
-  const todayR  = DAILY[ridx];
+  // Load exercises from API for a given zone
+  const loadZoneExercises = useCallback(async (zoneId) => {
+    if (apiExercises[zoneId] || apiLoading[zoneId]) return;
+    setApiLoading(prev => ({ ...prev, [zoneId]: true }));
+    const data = await fetchExercisesForZone(zoneId);
+    setApiLoading(prev => ({ ...prev, [zoneId]: false }));
+    if (data) {
+      setApiExercises(prev => ({ ...prev, [zoneId]: data }));
+      setApiStatus("ok");
+    } else {
+      setApiStatus(prev => prev === "ok" ? "ok" : "offline");
+    }
+  }, [apiExercises, apiLoading]);
+
+  // Get exercises for a zone (API if available, fallback otherwise)
+  function getExercises(zoneId) {
+    if (apiExercises[zoneId] && apiExercises[zoneId].length > 0) return apiExercises[zoneId];
+    return FALLBACK_EXERCISES[zoneId] ?? [];
+  }
+
+  const dayIdx = new Date().getDay();
+  const ridx   = dayIdx === 0 ? 6 : dayIdx - 1;
+  const todayR = DAILY[ridx];
   const totalXP = Object.values(state.xp).reduce((a, b) => a + b, 0);
   const avgXP   = Math.floor(totalXP / ZONES.length);
   const gRank   = getRank(avgXP);
@@ -437,61 +642,63 @@ export default function FitnessRPG() {
 
   function awardXP(zoneId, amount) {
     setState(prev => {
-      const old = prev.xp[zoneId], nw = old + amount;
+      const old = prev.xp[zoneId] ?? 0, nw = old + amount;
       if (getRank(nw).min > getRank(old).min) {
         const r = getRank(nw);
-        setTimeout(() => setRankUp({ zone: ZONES.find(z => z.id === zoneId).label, rank: r }), 400);
+        setTimeout(() => setRankUp({ zone: ZONES.find(z => z.id === zoneId)?.label, rank: r }), 400);
       }
       return { ...prev, xp: { ...prev.xp, [zoneId]: nw } };
     });
   }
 
-  // Toggle exercise in day view (multi-zone)
   function toggleExDay(ex, zoneId) {
     const zDone = done[zoneId] ?? new Set();
     const isDone = zDone.has(ex.name);
     setDone(prev => {
       const nxt = new Set(prev[zoneId] ?? []);
-      if (isDone) { nxt.delete(ex.name); } else { nxt.add(ex.name); }
+      if (isDone) nxt.delete(ex.name); else nxt.add(ex.name);
       return { ...prev, [zoneId]: nxt };
     });
     if (!isDone) {
       awardXP(zoneId, ex.xp);
       showToast(`+${ex.xp} XP · ${ex.name}`);
     } else {
-      setState(prev => ({ ...prev, xp: { ...prev.xp, [zoneId]: Math.max(0, prev.xp[zoneId] - ex.xp) } }));
+      setState(prev => ({ ...prev, xp: { ...prev.xp, [zoneId]: Math.max(0, (prev.xp[zoneId] ?? 0) - ex.xp) } }));
     }
   }
 
-  // Open a specific day (by index in DAILY)
   function openDay(idx) {
     const r = DAILY[idx];
     if (!r || r.zones.length === 0) return;
     setActiveDayIdx(idx);
     setDone({});
-    // Open first zone section by default
     const open = {};
     r.zones.forEach(z => { open[z] = true; });
     setOpenZoneSections(open);
+    // Kick off API loads for all zones in this day
+    r.zones.forEach(z => loadZoneExercises(z));
     setView("day");
   }
 
-  // Open single zone from zones grid
   function openZoneView(id) {
     setActiveZone(id);
     setDone({ [id]: new Set() });
+    loadZoneExercises(id);
     setView("zone");
   }
 
-  function finishDay() {
-    // Count total exercises done and XP earned
-    const totalDone = Object.values(done).reduce((acc, s) => acc + s.size, 0);
-    if (totalDone > 0) {
-      const earnedXP = Object.entries(done).reduce((acc, [zoneId, names]) => {
-        return acc + EXERCISES[zoneId].filter(e => names.has(e.name)).reduce((a, e) => a + e.xp, 0);
-      }, 0);
-      const zonesWorked = Object.keys(done).filter(z => done[z].size > 0);
+  function getWeekStart() {
+    const d = new Date();
+    d.setDate(d.getDate() - d.getDay());
+    return d.toLocaleDateString("es-CL");
+  }
 
+  function finishSession(zonesWorked, doneMap) {
+    const totalDone = Object.values(doneMap).reduce((acc, s) => acc + s.size, 0);
+    if (totalDone > 0) {
+      const earnedXP = Object.entries(doneMap).reduce((acc, [zoneId, names]) => {
+        return acc + getExercises(zoneId).filter(e => names.has(e.name)).reduce((a, e) => a + e.xp, 0);
+      }, 0);
       setState(prev => {
         const today = new Date().toLocaleDateString("es-CL");
         const yesterday = new Date(Date.now() - 86400000).toLocaleDateString("es-CL");
@@ -518,54 +725,12 @@ export default function FitnessRPG() {
     }
     setView("home");
     setActiveDayIdx(null);
-    setDone({});
-  }
-
-  // Legacy finishZone for single-zone view
-  function finishZone() {
-    if (activeZone) {
-      const zoneDone = done[activeZone] ?? new Set();
-      if (zoneDone.size > 0) {
-        const earnedXP = EXERCISES[activeZone]
-          .filter(e => zoneDone.has(e.name))
-          .reduce((a, e) => a + e.xp, 0);
-        setState(prev => {
-          const today = new Date().toLocaleDateString("es-CL");
-          const yesterday = new Date(Date.now() - 86400000).toLocaleDateString("es-CL");
-          const newStreak = prev.lastTrainedDate === yesterday ? prev.streak + 1
-            : prev.lastTrainedDate === today ? prev.streak : 1;
-          const weekStart = getWeekStart();
-          const weekSessions = prev.weekStart === weekStart ? prev.weekSessions + 1 : 1;
-          return {
-            ...prev,
-            totalSessions: prev.totalSessions + 1,
-            streak: newStreak,
-            lastTrainedDate: today,
-            weekStart,
-            weekSessions,
-            log: [...prev.log.slice(-49), {
-              date: today,
-              zone: activeZone,
-              xp: earnedXP,
-              exercises: zoneDone.size,
-            }],
-          };
-        });
-      }
-    }
-    setView("home");
     setActiveZone(null);
     setDone({});
   }
 
-  function getWeekStart() {
-    const d = new Date();
-    d.setDate(d.getDate() - d.getDay());
-    return d.toLocaleDateString("es-CL");
-  }
-
   function NavBtn({ v, label, iconName }) {
-    const isOn = view === v || (v === "routine" && (view === "day"));
+    const isOn = view === v || (v === "routine" && view === "day");
     return (
       <button className={`bnbtn${isOn ? " on" : ""}`} onClick={() => setView(v)}>
         <Icon name={iconName} size={19} />
@@ -574,7 +739,7 @@ export default function FitnessRPG() {
     );
   }
 
-  // ── HOME ──
+  // ── HOME VIEW ────────────────────────────────────────────────────────────────
   function HomeView() {
     const gNext = getNextRank(avgXP);
     const gPct  = xpPct(avgXP);
@@ -604,6 +769,14 @@ export default function FitnessRPG() {
           </div>
         </div>
 
+        {/* API status indicator */}
+        {apiStatus !== "unknown" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: apiStatus === "ok" ? "#4ade80" : "var(--muted)", marginTop: 10 }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: apiStatus === "ok" ? "#4ade80" : "var(--muted)" }} />
+            {apiStatus === "ok" ? "Ejercicios desde ExerciseDB API" : "Modo offline — ejercicios locales"}
+          </div>
+        )}
+
         <div className="sec">Objetivo semanal</div>
         <div className="goal-bar">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -625,12 +798,11 @@ export default function FitnessRPG() {
 
         <div className="sec">Hoy · {todayR.day}</div>
         {todayR.zones.length > 0 ? (
-          // FIX: onClick now calls openDay(ridx) instead of setView("routine")
           <div className="today" onClick={() => openDay(ridx)}>
             <div className="today-header">
               <div>
                 <div className="today-name">{todayR.label}</div>
-                <div className="today-sub">{todayR.zones.length} zonas · toca para comenzar</div>
+                <div className="today-sub">{todayR.zones.length} zona{todayR.zones.length !== 1 ? "s" : ""} · toca para comenzar</div>
               </div>
               <div className="today-arrow"><Icon name="arrow" size={16} /></div>
             </div>
@@ -639,11 +811,6 @@ export default function FitnessRPG() {
                 const z = ZONES.find(z => z.id === zid);
                 return <div key={zid} className="today-zone-badge">{z?.label}</div>;
               })}
-              <div className="today-zone-badge" style={{ marginLeft: "auto" }}>
-                <span className={`rrow-type type-${todayR.type}`} style={{ border: "none", background: "none", padding: 0, fontSize: 9 }}>
-                  {todayR.type.toUpperCase()}
-                </span>
-              </div>
             </div>
           </div>
         ) : (
@@ -658,22 +825,21 @@ export default function FitnessRPG() {
         <div className="wstrip">
           {DAILY.map((r, i) => {
             const isToday = i === ridx;
-            const isRest = r.zones.length === 0;
+            const isRest  = r.zones.length === 0;
             const todayObj = new Date();
-            const dayOfWeek = todayObj.getDay();
-            const dayDiff = i - (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
+            const dayDiff  = i - (todayObj.getDay() === 0 ? 6 : todayObj.getDay() - 1);
             const targetDate = new Date(todayObj);
             targetDate.setDate(todayObj.getDate() + dayDiff);
-            const dateStr = targetDate.toLocaleDateString("es-CL");
-            const hasDone = state.log.some(l => l.date === dateStr);
-            const isPast = dayDiff < 0;
+            const dateStr  = targetDate.toLocaleDateString("es-CL");
+            const hasDone  = state.log.some(l => l.date === dateStr);
+            const isPast   = dayDiff < 0;
             return (
               <div key={r.day} className={`wday${isToday ? " on" : ""}${isRest ? " rest" : ""}${hasDone && !isToday ? " done" : ""}`}>
-                <div className="wday-lbl">{r.day.slice(0, 3)}</div>
-                {isRest ? <span style={{ fontSize: 8 }}>—</span>
+                <div className="wday-lbl">{r.day.slice(0,3)}</div>
+                {isRest ? <span style={{fontSize:8}}>—</span>
                   : hasDone ? <div className="wday-dot" />
-                  : isPast ? <span style={{ fontSize: 8, opacity: 0.4 }}>○</span>
-                  : <div className="wday-dot" style={{ opacity: 0.2 }} />}
+                  : isPast ? <span style={{fontSize:8,opacity:.4}}>○</span>
+                  : <div className="wday-dot" style={{opacity:.2}} />}
               </div>
             );
           })}
@@ -682,8 +848,9 @@ export default function FitnessRPG() {
         <div className="sec">Zonas Musculares</div>
         <div className="zgrid">
           {ZONES.map(z => {
-            const rank = getRank(state.xp[z.id]);
-            const pct  = xpPct(state.xp[z.id]);
+            const rank = getRank(state.xp[z.id] ?? 0);
+            const pct  = xpPct(state.xp[z.id] ?? 0);
+            const hasApi = !!apiExercises[z.id];
             return (
               <button key={z.id} className="zcard" onClick={() => openZoneView(z.id)}
                 style={{ "--zbg": z.bg, "--zacc": z.accentDark }}>
@@ -693,10 +860,11 @@ export default function FitnessRPG() {
                 </div>
                 <div className="z-lbl">{z.label}</div>
                 <div className="z-rank">{rank.name}</div>
+                {hasApi && <div className="api-badge">API</div>}
                 <div className="z-bar">
                   <div className="z-bar-fill" style={{ width: `${pct}%`, background: z.accentDark }} />
                 </div>
-                <div className="z-xp">{state.xp[z.id]} / {getNextRank(state.xp[z.id])?.min ?? "MAX"} XP</div>
+                <div className="z-xp">{state.xp[z.id] ?? 0} / {getNextRank(state.xp[z.id] ?? 0)?.min ?? "MAX"} XP</div>
               </button>
             );
           })}
@@ -705,7 +873,7 @@ export default function FitnessRPG() {
     );
   }
 
-  // ── ROUTINE (weekly plan overview) ──
+  // ── ROUTINE VIEW ─────────────────────────────────────────────────────────────
   function RoutineView() {
     return (
       <div>
@@ -713,14 +881,11 @@ export default function FitnessRPG() {
         <div className="pg-sub">Toca un día para comenzar a entrenar</div>
         {DAILY.map((r, i) => {
           const isToday = i === ridx;
-          const typeClass = `type-${r.type}`;
-          const isRest = r.zones.length === 0;
-          // XP potential for this day
-          const potentialXP = r.zones.reduce((acc, zid) => acc + EXERCISES[zid].reduce((a, e) => a + e.xp, 0), 0);
+          const isRest  = r.zones.length === 0;
+          const potentialXP = r.zones.reduce((acc, zid) => acc + getExercises(zid).reduce((a, e) => a + e.xp, 0), 0);
           return (
             <div key={r.day}
               className={`rrow${isRest ? " rest-row" : ""}`}
-              // FIX: clicking any training day now calls openDay(i)
               onClick={() => !isRest && openDay(i)}
               style={isToday ? { borderColor: "rgba(245,158,11,.35)", background: "rgba(245,158,11,.04)" } : {}}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -732,12 +897,12 @@ export default function FitnessRPG() {
                   fontFamily: "'Rajdhani',sans-serif", fontSize: 10, fontWeight: 700,
                   color: isToday ? "var(--accent)" : "var(--muted)",
                 }}>
-                  {r.day.slice(0, 3).toUpperCase()}
+                  {r.day.slice(0,3).toUpperCase()}
                 </div>
                 <div>
                   <div style={{ fontWeight: 500, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
                     {r.label}
-                    {isToday && <span style={{ fontSize: 9, color: "var(--accent)", fontWeight: 700, letterSpacing: ".08em" }}>HOY</span>}
+                    {isToday && <span style={{ fontSize: 9, color: "var(--accent)", fontWeight: 700 }}>HOY</span>}
                   </div>
                   <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
                     {r.zones.length > 0
@@ -747,7 +912,7 @@ export default function FitnessRPG() {
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className={`rrow-type ${typeClass}`}>{r.type.toUpperCase()}</span>
+                <span className={`rrow-type type-${r.type}`}>{r.type.toUpperCase()}</span>
                 {!isRest && <Icon name="arrow" size={14} color="var(--muted)" />}
               </div>
             </div>
@@ -757,25 +922,96 @@ export default function FitnessRPG() {
     );
   }
 
-  // ── DAY VIEW (multi-zone workout) — THIS IS THE NEW/FIXED VIEW ──
+  // ── EXERCISE LIST (shared between day and zone views) ─────────────────────
+  function ExerciseList({ zoneId, zoneDone, onToggle }) {
+    const exercises  = getExercises(zoneId);
+    const isLoading  = apiLoading[zoneId];
+    const fromApi    = exercises.length > 0 && exercises[0]?.fromApi;
+    const levelLabels = { 1: "Principiante", 2: "Intermedio", 3: "Avanzado", 4: "Élite" };
+
+    if (isLoading) {
+      return (
+        <div>
+          {[1,2,3].map(i => (
+            <div key={i} className="loading-ex">
+              <div className="loading-spinner" />
+              Cargando ejercicios desde API...
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        {fromApi && (
+          <div className="api-source">
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#38bdf8" }} />
+            Ejercicios desde ExerciseDB API
+          </div>
+        )}
+        {[1, 2, 3, 4].map(lvl => {
+          const lvlExs = exercises.filter(e => e.level === lvl);
+          if (lvlExs.length === 0) return null;
+          return (
+            <div key={lvl}>
+              <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)", margin: "8px 4px 4px" }}>
+                {levelLabels[lvl]}
+              </div>
+              {lvlExs.map(ex => {
+                const isDone = zoneDone.has(ex.name);
+                return (
+                  <div key={ex.name} className={`exitem${isDone ? " done" : ""}`}
+                    onClick={() => onToggle(ex)}>
+                    <div className="excheck" onClick={e => { e.stopPropagation(); onToggle(ex); }}>
+                      {isDone && <Icon name="check" size={12} color="#07090f" />}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div className="exname">{ex.name}</div>
+                      <div className="exmeta">{ex.sets} series × {ex.reps}</div>
+                      <div className="ex-muscle">{ex.muscle}</div>
+                      {/* Timer button for timed exercises */}
+                      {ex.timed && ex.timerSecs && (
+                        <button
+                          className="ex-timer-btn"
+                          onClick={e => { e.stopPropagation(); setActiveTimer(ex); }}
+                        >
+                          <Icon name="timer" size={11} color="currentColor" />
+                          Cronometrar ({ex.timerSecs}s × {ex.sets} series)
+                        </button>
+                      )}
+                    </div>
+                    <div className={`ex-level l${ex.level}`}>
+                      {ex.level === 1 ? "Básico" : ex.level === 2 ? "Inter." : ex.level === 3 ? "Avanz." : "Élite"}
+                    </div>
+                    <div className="exxp">+{ex.xp}</div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ── DAY VIEW ─────────────────────────────────────────────────────────────────
   function DayView() {
     if (activeDayIdx === null) return null;
     const dayRoutine = DAILY[activeDayIdx];
     const isToday = activeDayIdx === ridx;
-
     const totalDoneCount = Object.values(done).reduce((acc, s) => acc + s.size, 0);
-    const totalEarnedXP = Object.entries(done).reduce((acc, [zoneId, names]) => {
-      return acc + EXERCISES[zoneId].filter(e => names.has(e.name)).reduce((a, e) => a + e.xp, 0);
+    const totalEarnedXP  = Object.entries(done).reduce((acc, [zoneId, names]) => {
+      return acc + getExercises(zoneId).filter(e => names.has(e.name)).reduce((a, e) => a + e.xp, 0);
     }, 0);
-
-    const levelLabels = { 1: "Principiante", 2: "Intermedio", 3: "Avanzado", 4: "Élite" };
 
     return (
       <div>
-        <button className="back" onClick={finishDay}>
+        <button className="back" onClick={() => finishSession(
+          Object.keys(done).filter(z => done[z].size > 0), done
+        )}>
           <Icon name="back" size={16} /> {totalDoneCount > 0 ? "Guardar y volver" : "Volver"}
         </button>
-
         <div style={{ marginBottom: 6 }}>
           <div className="pg-title" style={{ marginBottom: 2 }}>{dayRoutine.label}</div>
           <div style={{ fontSize: 11, color: "var(--muted2)" }}>
@@ -784,7 +1020,6 @@ export default function FitnessRPG() {
           </div>
         </div>
 
-        {/* Summary bar */}
         <div className="day-summary">
           <div>
             <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Progreso de sesión</div>
@@ -798,18 +1033,16 @@ export default function FitnessRPG() {
           </div>
         </div>
 
-        {/* Each zone as a collapsible section */}
         {dayRoutine.zones.map(zoneId => {
           const z = ZONES.find(z => z.id === zoneId);
           const zoneDone = done[zoneId] ?? new Set();
           const isOpen = openZoneSections[zoneId] ?? false;
-          const exs = EXERCISES[zoneId];
+          const exs = getExercises(zoneId);
           const zoneEarned = exs.filter(e => zoneDone.has(e.name)).reduce((a, e) => a + e.xp, 0);
-          const rank = getRank(state.xp[zoneId]);
+          const rank = getRank(state.xp[zoneId] ?? 0);
 
           return (
             <div key={zoneId}>
-              {/* Collapsible header */}
               <div
                 className={`zone-section-hdr${isOpen ? " open" : ""}`}
                 onClick={() => setOpenZoneSections(prev => ({ ...prev, [zoneId]: !prev[zoneId] }))}
@@ -819,6 +1052,9 @@ export default function FitnessRPG() {
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
                       {z.label}
+                      {apiLoading[zoneId] && (
+                        <div className="loading-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} />
+                      )}
                       {zoneDone.size > 0 && (
                         <span style={{ fontSize: 10, color: "#4ade80", fontWeight: 700 }}>
                           {zoneDone.size}/{exs.length} ✓
@@ -826,7 +1062,7 @@ export default function FitnessRPG() {
                       )}
                     </div>
                     <div style={{ fontSize: 10, color: "var(--muted2)", marginTop: 2 }}>
-                      {rank.name} · {state.xp[zoneId]} XP
+                      {rank.name} · {state.xp[zoneId] ?? 0} XP
                       {zoneEarned > 0 && <span style={{ color: "var(--accent)" }}> +{zoneEarned} hoy</span>}
                     </div>
                   </div>
@@ -839,41 +1075,13 @@ export default function FitnessRPG() {
                 </div>
               </div>
 
-              {/* Exercise list */}
               {isOpen && (
                 <div className="zone-section-body">
-                  {/* Group by level */}
-                  {[1, 2, 3, 4].map(lvl => {
-                    const lvlExs = exs.filter(e => e.level === lvl);
-                    if (lvlExs.length === 0) return null;
-                    return (
-                      <div key={lvl}>
-                        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--muted)", margin: "8px 4px 4px" }}>
-                          {levelLabels[lvl]}
-                        </div>
-                        {lvlExs.map(ex => {
-                          const isDone = zoneDone.has(ex.name);
-                          return (
-                            <div key={ex.name} className={`exitem${isDone ? " done" : ""}`}
-                              onClick={() => toggleExDay(ex, zoneId)}>
-                              <div className="excheck">
-                                {isDone && <Icon name="check" size={12} color="#07090f" />}
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <div className="exname">{ex.name}</div>
-                                <div className="exmeta">{ex.sets} series × {ex.reps}</div>
-                                <div className="ex-muscle">{ex.muscle}</div>
-                              </div>
-                              <div className={`ex-level l${ex.level}`}>
-                                {ex.level === 1 ? "Básico" : ex.level === 2 ? "Inter." : ex.level === 3 ? "Avanz." : "Élite"}
-                              </div>
-                              <div className="exxp">+{ex.xp}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
+                  <ExerciseList
+                    zoneId={zoneId}
+                    zoneDone={zoneDone}
+                    onToggle={ex => toggleExDay(ex, zoneId)}
+                  />
                 </div>
               )}
             </div>
@@ -882,7 +1090,7 @@ export default function FitnessRPG() {
 
         <button
           className="save-btn"
-          onClick={finishDay}
+          onClick={() => finishSession(Object.keys(done).filter(z => done[z].size > 0), done)}
           disabled={totalDoneCount === 0}
           style={{ marginTop: 16 }}
         >
@@ -894,20 +1102,21 @@ export default function FitnessRPG() {
     );
   }
 
-  // ── ZONE VIEW (single zone from zones grid) ──
+  // ── ZONE VIEW ─────────────────────────────────────────────────────────────────
   function ZoneView() {
     if (!activeZone) return null;
     const z   = ZONES.find(z => z.id === activeZone);
-    const exs = EXERCISES[activeZone];
+    const exs = getExercises(activeZone);
     const zoneDone = done[activeZone] ?? new Set();
     const earned = exs.filter(e => zoneDone.has(e.name)).reduce((a, e) => a + e.xp, 0);
-    const rank   = getRank(state.xp[activeZone]);
-    const pct    = xpPct(state.xp[activeZone]);
-    const levelLabels = { 1: "Principiante", 2: "Intermedio", 3: "Avanzado", 4: "Élite" };
+    const rank   = getRank(state.xp[activeZone] ?? 0);
+    const pct    = xpPct(state.xp[activeZone] ?? 0);
 
     return (
       <div>
-        <button className="back" onClick={finishZone}>
+        <button className="back" onClick={() => finishSession(
+          zoneDone.size > 0 ? [activeZone] : [], done
+        )}>
           <Icon name="back" size={16} /> {zoneDone.size > 0 ? "Guardar y volver" : "Volver"}
         </button>
         <div style={{
@@ -920,8 +1129,12 @@ export default function FitnessRPG() {
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                 <span className="pg-title" style={{ marginBottom: 0, fontSize: 22 }}>{z.label}</span>
                 <RankBadge rank={rank} size={30} />
+                {apiLoading[activeZone] && <div className="loading-spinner" />}
               </div>
-              <div style={{ fontSize: 11, color: "var(--muted2)" }}>{rank.name} · {state.xp[activeZone]} XP</div>
+              <div style={{ fontSize: 11, color: "var(--muted2)" }}>{rank.name} · {state.xp[activeZone] ?? 0} XP</div>
+              {apiExercises[activeZone] && (
+                <div className="api-badge" style={{ marginTop: 4 }}>ExerciseDB API</div>
+              )}
             </div>
             {earned > 0 && (
               <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -934,43 +1147,19 @@ export default function FitnessRPG() {
             <div className="xb-fill" style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${z.accentDark}, ${z.accentDark}bb)` }} />
           </div>
           <div className="xb-meta">
-            <span>{state.xp[activeZone]} XP</span>
-            <span>{getNextRank(state.xp[activeZone]) ? `${getNextRank(state.xp[activeZone]).min - state.xp[activeZone]} para ${getNextRank(state.xp[activeZone]).name}` : "Rango máximo"}</span>
+            <span>{state.xp[activeZone] ?? 0} XP</span>
+            <span>{getNextRank(state.xp[activeZone] ?? 0) ? `${getNextRank(state.xp[activeZone] ?? 0).min - (state.xp[activeZone] ?? 0)} para ${getNextRank(state.xp[activeZone] ?? 0).name}` : "Rango máximo"}</span>
           </div>
         </div>
 
-        {[1, 2, 3, 4].map(lvl => {
-          const lvlExs = exs.filter(e => e.level === lvl);
-          if (lvlExs.length === 0) return null;
-          return (
-            <div key={lvl}>
-              <div className="sec">{levelLabels[lvl]}</div>
-              {lvlExs.map(ex => {
-                const isDone = zoneDone.has(ex.name);
-                return (
-                  <div key={ex.name} className={`exitem${isDone ? " done" : ""}`}
-                    onClick={() => toggleExDay(ex, activeZone)}>
-                    <div className="excheck">
-                      {isDone && <Icon name="check" size={12} color="#07090f" />}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div className="exname">{ex.name}</div>
-                      <div className="exmeta">{ex.sets} series × {ex.reps}</div>
-                      <div className="ex-muscle">{ex.muscle}</div>
-                    </div>
-                    <div className={`ex-level l${ex.level}`}>
-                      {ex.level === 1 ? "Básico" : ex.level === 2 ? "Inter." : ex.level === 3 ? "Avanz." : "Élite"}
-                    </div>
-                    <div className="exxp">+{ex.xp}</div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
+        <ExerciseList
+          zoneId={activeZone}
+          zoneDone={zoneDone}
+          onToggle={ex => toggleExDay(ex, activeZone)}
+        />
 
         {zoneDone.size > 0 && (
-          <button className="save-btn" onClick={finishZone}>
+          <button className="save-btn" onClick={() => finishSession([activeZone], done)}>
             Completar — {zoneDone.size} ejercicio{zoneDone.size !== 1 ? "s" : ""} · +{earned} XP
           </button>
         )}
@@ -978,7 +1167,7 @@ export default function FitnessRPG() {
     );
   }
 
-  // ── STATS ──
+  // ── STATS VIEW ────────────────────────────────────────────────────────────────
   function StatsView() {
     const earnedAchs = ACHIEVEMENTS.filter(a => state.achievements.includes(a.id));
     const lockedAchs = ACHIEVEMENTS.filter(a => !state.achievements.includes(a.id));
@@ -1001,7 +1190,7 @@ export default function FitnessRPG() {
 
         <div className="sec">Por zona</div>
         {ZONES.map(z => {
-          const xp = state.xp[z.id], rank = getRank(xp), pct = xpPct(xp), next = getNextRank(xp);
+          const xp = state.xp[z.id] ?? 0, rank = getRank(xp), pct = xpPct(xp), next = getNextRank(xp);
           return (
             <div key={z.id} className="szrow">
               <div className="szhead">
@@ -1066,6 +1255,7 @@ export default function FitnessRPG() {
         <button className="reset-btn" onClick={() => {
           if (confirm("¿Reiniciar todo el progreso? Esta acción no se puede deshacer.")) {
             setState(DEFAULT_STATE());
+            setApiExercises({});
             setView("home");
           }
         }}>
@@ -1075,6 +1265,7 @@ export default function FitnessRPG() {
     );
   }
 
+  // ── RENDER ───────────────────────────────────────────────────────────────────
   return (
     <div className="frpg">
       {toast && <div className="toast">⚡ {toast}</div>}
@@ -1097,6 +1288,13 @@ export default function FitnessRPG() {
             <button className="ru-btn" onClick={() => setRankUp(null)}>Continuar</button>
           </div>
         </div>
+      )}
+      {/* Exercise Timer Modal */}
+      {activeTimer && (
+        <ExerciseTimer
+          exercise={activeTimer}
+          onClose={() => setActiveTimer(null)}
+        />
       )}
 
       <div className="topbar">
