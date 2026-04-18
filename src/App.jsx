@@ -409,6 +409,27 @@ const STYLES = `
 .timer-set-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.1);border:1px solid var(--border2);transition:all .3s;}
 .timer-set-dot.done{background:#4ade80;border-color:#4ade80;}
 .timer-set-dot.current{background:rgba(56,189,248,.4);border-color:#38bdf8;}
+/* ── EXERCISE DETAIL MODAL ── */
+.ex-detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:flex-end;justify-content:center;z-index:200;backdrop-filter:blur(12px);animation:fin .2s ease;}
+.ex-detail-card{background:var(--card);border:1px solid var(--border2);border-radius:24px 24px 0 0;width:100%;max-width:430px;max-height:90svh;display:flex;flex-direction:column;animation:slide-up .3s cubic-bezier(.34,1.3,.64,1);}
+@keyframes slide-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.ex-detail-handle{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:12px auto 0;flex-shrink:0;}
+.ex-detail-scroll{overflow-y:auto;padding:0 20px 32px;flex:1;}
+.ex-gif-wrap{width:100%;aspect-ratio:1;border-radius:16px;overflow:hidden;background:rgba(255,255,255,.03);border:1px solid var(--border);margin:16px 0;display:flex;align-items:center;justify-content:center;position:relative;}
+.ex-gif-wrap img{width:100%;height:100%;object-fit:contain;}
+.ex-gif-placeholder{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);}
+.ex-detail-name{font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;margin-bottom:4px;text-transform:capitalize;}
+.ex-detail-badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
+.ex-badge{padding:4px 10px;border-radius:100px;font-size:10px;font-weight:600;}
+.ex-badge-muscle{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:#f59e0b;}
+.ex-badge-equip{background:rgba(56,189,248,.1);border:1px solid rgba(56,189,248,.25);color:#38bdf8;}
+.ex-badge-secondary{background:rgba(255,255,255,.05);border:1px solid var(--border2);color:var(--muted2);}
+.ex-section-title{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px;}
+.ex-step{display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;}
+.ex-step-num{width:22px;height:22px;border-radius:50%;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:var(--accent);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+.ex-step-text{font-size:13px;color:var(--text);line-height:1.6;}
+.ex-detail-cta{width:100%;padding:14px;border-radius:13px;border:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;text-transform:uppercase;background:linear-gradient(135deg,#f59e0b,#f97316);color:#07090f;margin-top:16px;transition:opacity .2s;}
+.ex-detail-cta:active{opacity:.85;}
 `;
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
@@ -614,6 +635,7 @@ export default function FitnessRPG() {
   const [user, setUser]           = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [state, setState]         = useState(DEFAULT_STATE);
+  const [detailEx, setDetailEx] = useState(null); // { exercise, zoneId }
 
   // Exercise cache from API
   const [apiExercises, setApiExercises] = useState({});
@@ -1002,7 +1024,7 @@ export default function FitnessRPG() {
   }
 
   // ── EXERCISE LIST (shared between day and zone views) ─────────────────────
-  function ExerciseList({ zoneId, zoneDone, onToggle }) {
+  function ExerciseList({ zoneId, zoneDone, onToggle, onOpenDetail }) {
     const exercises  = getExercises(zoneId);
     const isLoading  = apiLoading[zoneId];
     const fromApi    = exercises.length > 0 && exercises[0]?.fromApi;
@@ -1035,7 +1057,7 @@ export default function FitnessRPG() {
                 const isDone = zoneDone.has(ex.name);
                 return (
                   <div key={ex.name} className={`exitem${isDone ? " done" : ""}`}
-                    onClick={() => onToggle(ex)}>
+                    onClick={() => onOpenDetail(ex)}>
                     <div className="excheck" onClick={e => { e.stopPropagation(); onToggle(ex); }}>
                       {isDone && <Icon name="check" size={12} color="#07090f" />}
                     </div>
@@ -1154,6 +1176,7 @@ export default function FitnessRPG() {
                     zoneId={zoneId}
                     zoneDone={zoneDone}
                     onToggle={ex => toggleExDay(ex, zoneId)}
+                    onOpenDetail={ex => setDetailEx({ exercise: ex, zoneId })}
                   />
                 </div>
               )}
@@ -1223,9 +1246,10 @@ export default function FitnessRPG() {
         </div>
 
         <ExerciseList
-          zoneId={activeZone}
+          zoneId={zoneId}
           zoneDone={zoneDone}
-          onToggle={ex => toggleExDay(ex, activeZone)}
+          onToggle={ex => toggleExDay(ex, zoneId)}
+          onOpenDetail={ex => setDetailEx({ exercise: ex, zoneId })}
         />
 
         {zoneDone.size > 0 && (
@@ -1351,6 +1375,100 @@ export default function FitnessRPG() {
   }
 
   if (!user) return <AuthScreen onAuth={(u) => { setUser(u); loadProfile(u.id); }} />;
+
+  // ── EXERCISE DETAIL MODAL ─────────────────────────────────────────────────────
+  function ExerciseDetailModal({ exercise, zoneId, onClose, onToggleDone, isDone }) {
+    const [gifLoaded, setGifLoaded] = useState(false);
+    const z = ZONES.find(z => z.id === zoneId);
+
+    return (
+      <div className="ex-detail-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="ex-detail-card">
+          <div className="ex-detail-handle" />
+          <div className="ex-detail-scroll">
+
+            {/* GIF */}
+            <div className="ex-gif-wrap">
+              {exercise.gifUrl ? (
+                <>
+                  {!gifLoaded && (
+                    <div className="ex-gif-placeholder">
+                      <div className="loading-spinner" style={{ width: 24, height: 24 }} />
+                      <span style={{ fontSize: 11 }}>Cargando animación...</span>
+                    </div>
+                  )}
+                  <img
+                    src={exercise.gifUrl}
+                    alt={exercise.name}
+                    onLoad={() => setGifLoaded(true)}
+                    style={{ display: gifLoaded ? "block" : "none" }}
+                  />
+                </>
+              ) : (
+                <div className="ex-gif-placeholder">
+                  <Icon name="muscle" size={40} color="var(--muted)" />
+                  <span style={{ fontSize: 11 }}>Sin animación disponible</span>
+                </div>
+              )}
+            </div>
+
+            {/* Nombre y badges */}
+            <div className="ex-detail-name">{exercise.name}</div>
+            <div className="ex-detail-badges">
+              {exercise.muscle && (
+                <span className="ex-badge ex-badge-muscle">{exercise.muscle}</span>
+              )}
+              {exercise.equipment && (
+                <span className="ex-badge ex-badge-equip">{exercise.equipment}</span>
+              )}
+              {(exercise.secondaryMuscles ?? []).map(m => (
+                <span key={m} className="ex-badge ex-badge-secondary">{m}</span>
+              ))}
+            </div>
+
+            {/* Info rápida */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+              {[
+                { label: "Series", val: exercise.sets },
+                { label: "Reps", val: exercise.reps },
+                { label: "XP", val: `+${exercise.xp}` },
+              ].map(({ label, val }) => (
+                <div key={label} style={{
+                  flex: 1, background: "var(--card2)", border: "1px solid var(--border)",
+                  borderRadius: 10, padding: "10px 8px", textAlign: "center",
+                }}>
+                  <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 20, fontWeight: 700, color: z?.accentDark ?? "var(--accent)" }}>{val}</div>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Instrucciones */}
+            {exercise.instructions?.length > 0 && (
+              <>
+                <div className="ex-section-title">Cómo realizar el ejercicio</div>
+                {exercise.instructions.map((step, i) => (
+                  <div key={i} className="ex-step">
+                    <div className="ex-step-num">{i + 1}</div>
+                    <div className="ex-step-text">{step}</div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* Botón marcar como hecho */}
+            <button
+              className="ex-detail-cta"
+              onClick={() => { onToggleDone(exercise); onClose(); }}
+              style={isDone ? { background: "rgba(74,222,128,.15)", color: "#4ade80", border: "1px solid rgba(74,222,128,.3)" } : {}}
+            >
+              {isDone ? "✓ Completado" : "Marcar como completado"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   // ── RENDER ───────────────────────────────────────────────────────────────────
   return (
     <div className="frpg">
@@ -1380,6 +1498,15 @@ export default function FitnessRPG() {
         <ExerciseTimer
           exercise={activeTimer}
           onClose={() => setActiveTimer(null)}
+        />
+      )}
+      {detailEx && (
+        <ExerciseDetailModal
+          exercise={detailEx.exercise}
+          zoneId={detailEx.zoneId}
+          onClose={() => setDetailEx(null)}
+          onToggleDone={(ex) => toggleExDay(ex, detailEx.zoneId)}
+          isDone={(done[detailEx.zoneId] ?? new Set()).has(detailEx.exercise.name)}
         />
       )}
 
