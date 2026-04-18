@@ -152,12 +152,15 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 async function fetchExercisesForZone(zoneId) {
   const bodyPart = ZONE_TO_BODYPART[zoneId];
   if (!bodyPart) return null;
+
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
   try {
     const res = await fetch(
       `${SUPABASE_URL}/functions/v1/exercises?bodyPart=${encodeURIComponent(bodyPart)}&limit=15`,
       {
         headers: {
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         signal: AbortSignal.timeout(8000),
       }
@@ -165,19 +168,64 @@ async function fetchExercisesForZone(zoneId) {
     if (!res.ok) throw new Error("API error");
     const exercises = await res.json();
 
-    return exercises.slice(0, 10).map((ex) => ({
-      name: ex.name,
-      sets: 3,
-      reps: "10",
-      xp: 20,
-      level: 1,
-      muscle: ex.target,
-      secondaryMuscles: ex.secondaryMuscles,
-      instructions: ex.instructions,  // pasos detallados
-      gifUrl: ex.gifUrl,              // GIF del ejercicio
-      equipment: ex.equipment,
-      fromApi: true,
-    }));
+    return exercises.slice(0, 12).map((ex) => {
+      // Clasificar nivel según equipo y palabras clave en el nombre
+      const name = ex.name?.toLowerCase() ?? "";
+      const equip = ex.equipment?.toLowerCase() ?? "";
+
+      let level = 1;
+      if (
+        equip === "barbell" ||
+        equip === "cable" ||
+        name.includes("weighted") ||
+        name.includes("decline") ||
+        name.includes("incline")
+      ) level = 2;
+      if (
+        name.includes("single") ||
+        name.includes("one arm") ||
+        name.includes("archer") ||
+        name.includes("pistol") ||
+        name.includes("dragon") ||
+        equip === "olympic barbell"
+      ) level = 3;
+      if (
+        name.includes("planche") ||
+        name.includes("front lever") ||
+        name.includes("muscle up")
+      ) level = 4;
+
+      // Detectar si es ejercicio con tiempo
+      const timed = /plank|hold|static|wall sit|superman|hollow/i.test(name);
+      const timerSecs = timed ? 30 : null;
+
+      // Sets y reps según nivel
+      const sets = level <= 1 ? 3 : 4;
+      const reps = timed
+        ? `${timerSecs}s`
+        : level === 1 ? "12"
+        : level === 2 ? "10"
+        : "8";
+
+      // XP según nivel
+      const xp = 15 + level * 7;
+
+      return {
+        name: ex.name,
+        sets,
+        reps,
+        xp,
+        level,
+        muscle: ex.target,
+        secondaryMuscles: ex.secondaryMuscles ?? [],
+        instructions: ex.instructions ?? [],
+        gifUrl: ex.gifUrl ?? null,
+        equipment: ex.equipment,
+        timed,
+        timerSecs,
+        fromApi: true,
+      };
+    });
   } catch {
     return null;
   }
@@ -809,14 +857,6 @@ export default function FitnessRPG() {
           </div>
         </div>
 
-        {/* API status indicator */}
-        {apiStatus !== "unknown" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: apiStatus === "ok" ? "#4ade80" : "var(--muted)", marginTop: 10 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: apiStatus === "ok" ? "#4ade80" : "var(--muted)" }} />
-            {apiStatus === "ok" ? "Ejercicios desde ExerciseDB API" : "Modo offline — ejercicios locales"}
-          </div>
-        )}
-
         <div className="sec">Objetivo semanal</div>
         <div className="goal-bar">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -900,7 +940,6 @@ export default function FitnessRPG() {
                 </div>
                 <div className="z-lbl">{z.label}</div>
                 <div className="z-rank">{rank.name}</div>
-                {hasApi && <div className="api-badge">API</div>}
                 <div className="z-bar">
                   <div className="z-bar-fill" style={{ width: `${pct}%`, background: z.accentDark }} />
                 </div>
@@ -984,12 +1023,6 @@ export default function FitnessRPG() {
 
     return (
       <div>
-        {fromApi && (
-          <div className="api-source">
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#38bdf8" }} />
-            Ejercicios desde ExerciseDB API
-          </div>
-        )}
         {[1, 2, 3, 4].map(lvl => {
           const lvlExs = exercises.filter(e => e.level === lvl);
           if (lvlExs.length === 0) return null;
@@ -1172,9 +1205,6 @@ export default function FitnessRPG() {
                 {apiLoading[activeZone] && <div className="loading-spinner" />}
               </div>
               <div style={{ fontSize: 11, color: "var(--muted2)" }}>{rank.name} · {state.xp[activeZone] ?? 0} XP</div>
-              {apiExercises[activeZone] && (
-                <div className="api-badge" style={{ marginTop: 4 }}>ExerciseDB API</div>
-              )}
             </div>
             {earned > 0 && (
               <div style={{ textAlign: "right", flexShrink: 0 }}>
