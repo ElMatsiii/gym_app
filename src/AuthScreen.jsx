@@ -243,11 +243,19 @@ export default function AuthScreen({ onAuth }) {
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) { setLoading(false); setError(translateError(error.message)); return; }
 
-    // Create profile row
+    // Espera a que la sesión esté activa
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+    setLoading(false);
+    setError("Error al iniciar sesión automáticamente. Intenta ingresar manualmente.");
+    return;
+    }
+
+    // Ahora inserta el perfil
     const { error: profileError } = await supabase.from("profiles").insert({
-      id: data.user.id,
-      username: username.trim(),
-      state: {},
+    id: data.user.id,
+    username: username.trim(),
+    state: {},
     });
 
     setLoading(false);
