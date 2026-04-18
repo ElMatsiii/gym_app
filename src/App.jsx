@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-
+import { supabase } from "./supabase";
+import AuthScreen from "./AuthScreen";
 // ─── API CONFIG ───────────────────────────────────────────────────────────────
 // ExerciseDB open-source API (exercisedb.dev) — free, no key required
 const EXERCISEDB_BASE = "https://exercisedb.dev/api";
@@ -567,8 +568,9 @@ function ExerciseTimer({ exercise, onClose }) {
 export default function FitnessRPG() {
   const [state, setState] = useState(() => {
     try {
-      const s = localStorage.getItem("frpg-v5");
-      return s ? { ...DEFAULT_STATE(), ...JSON.parse(s) } : DEFAULT_STATE();
+      const [user, setUser]   = useState(null);       // usuario de Supabase
+      const [authReady, setAuthReady] = useState(false); // sesión verificada
+      const [state, setState] = useState(DEFAULT_STATE);
     } catch { return DEFAULT_STATE(); }
   });
 
@@ -594,9 +596,54 @@ export default function FitnessRPG() {
     return () => document.head.removeChild(el);
   }, []);
 
+    // Verificar sesión al cargar
   useEffect(() => {
-    try { localStorage.setItem("frpg-v5", JSON.stringify(state)); } catch {}
-  }, [state]);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        loadProfile(session.user.id);
+      } else {
+        setAuthReady(true);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) { setUser(null); setState(DEFAULT_STATE()); setAuthReady(true); }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Cargar perfil desde Supabase
+  async function loadProfile(userId) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("state")
+      .eq("id", userId)
+      .single();
+    if (data?.state && Object.keys(data.state).length > 0) {
+      setState(prev => ({ ...DEFAULT_STATE(), ...data.state }));
+    }
+    setAuthReady(true);
+  }
+
+  // Guardar en Supabase cuando el estado cambia
+  useEffect(() => {
+    if (!user) return;
+    const timer = setTimeout(async () => {
+      await supabase.from("profiles").update({
+        state,
+        updated_at: new Date().toISOString(),
+      }).eq("id", user.id);
+    }, 1500); // debounce de 1.5s para no spamear
+    return () => clearTimeout(timer);
+  }, [state, user]);
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setUser(null);
+    setState(DEFAULT_STATE());
+  }
 
   useEffect(() => {
     const earned = ACHIEVEMENTS.filter(a => a.cond(state));
@@ -1264,7 +1311,23 @@ export default function FitnessRPG() {
       </div>
     );
   }
+    if (!authReady) {
+    return (
+      <div style={{
+        minHeight: "100svh", background: "#060810",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: "50%",
+          border: "2px solid rgba(245,158,11,0.2)",
+          borderTopColor: "#f59e0b",
+          animation: "spin 0.7s linear infinite",
+        }} />
+      </div>
+    );
+  }
 
+  if (!user) return <AuthScreen onAuth={(u) => { setUser(u); loadProfile(u.id); }} />;
   // ── RENDER ───────────────────────────────────────────────────────────────────
   return (
     <div className="frpg">
@@ -1308,6 +1371,14 @@ export default function FitnessRPG() {
             <Icon name="zap" size={12} color="var(--accent)" />
             <b>{totalXP.toLocaleString()}</b>
           </div>
+          <button onClick={handleLogout} style={{
+            background: "none", border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: "100px", padding: "4px 10px",
+            color: "#4a5568", fontSize: 10, fontWeight: 600,
+            cursor: "pointer", letterSpacing: "0.05em",
+          }}>
+            Salir
+          </button>
         </div>
       </div>
 
