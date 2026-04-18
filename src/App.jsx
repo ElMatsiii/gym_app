@@ -148,15 +148,21 @@ const ACHIEVEMENTS = [
 
 // ─── API HELPERS ──────────────────────────────────────────────────────────────
 async function fetchExercisesForZone(zoneId) {
-  const bodyPart = ZONE_TO_BODYPART[zoneId];
+ const bodyPart = ZONE_TO_BODYPART[zoneId];
   if (!bodyPart) return null;
   try {
-    const res = await fetch(
-      `${EXERCISEDB_BASE}/exercises/bodyPart/${encodeURIComponent(bodyPart)}?limit=15&offset=0`,
-      { signal: AbortSignal.timeout(5000) }
-    );
+    const url = `${EXERCISEDB_BASE}/exercises/bodyPart/${encodeURIComponent(bodyPart)}?limit=15&offset=0`;
+    console.log("🔍 Fetching:", url);
+    
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    console.log("📡 Status:", res.status);
+    
     if (!res.ok) throw new Error("API error");
+
     const data = await res.json();
+    console.log("📦 Raw response:", data);
+    console.log("📋 Exercises array:", data.data ?? data);
+    
     const exercises = (data.data ?? data);
     if (!Array.isArray(exercises) || exercises.length === 0) return null;
 
